@@ -16,7 +16,7 @@
     RefreshCw,
     AlertCircle,
     UploadCloud,
-    ExternalLink
+    Zap
   } from 'lucide-svelte';
 
   let nama_laundry = $settings.nama_laundry;
@@ -32,7 +32,7 @@
   let pushingData = false;
   let connectionStatus: { success?: boolean; message?: string } | null = null;
 
-  function handleSaveSettings() {
+  async function handleSaveSettings() {
     updateSettings({
       nama_laundry,
       alamat,
@@ -43,6 +43,12 @@
       default_estimasi: Number(default_estimasi),
       gas_script_url
     });
+
+    if (gas_script_url) {
+      pushingData = true;
+      await pushAllToGAS();
+      pushingData = false;
+    }
   }
 
   async function handleTestConnection() {
@@ -66,9 +72,6 @@
 
   async function handlePushAll() {
     handleSaveSettings();
-    pushingData = true;
-    await pushAllToGAS();
-    pushingData = false;
   }
 </script>
 
@@ -81,16 +84,21 @@
         Pengaturan Aplikasi
       </h1>
       <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-        Kelola profil bisnis laundry Anda dan konfigurasi sambungan ke Google Spreadsheet.
+        Kelola profil bisnis laundry dan konfigurasi sambungan otomatis ke Google Spreadsheet / AppSheet.
       </p>
     </div>
 
     <button
       type="button"
       on:click={handleSaveSettings}
-      class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-blue-500/20 transition active:scale-95"
+      disabled={pushingData}
+      class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-blue-500/20 transition active:scale-95 disabled:opacity-50"
     >
-      <Save class="w-4 h-4" /> Simpan Perubahan
+      {#if pushingData}
+        <RefreshCw class="w-4 h-4 animate-spin" /> Menyimpan & Sinkronisasi...
+      {:else}
+        <Save class="w-4 h-4" /> Simpan Perubahan
+      {/if}
     </button>
   </div>
 
@@ -192,10 +200,21 @@
     <!-- Right Column: Google Apps Script Backend Integration -->
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-card space-y-6">
       <h3 class="text-base font-extrabold text-slate-800 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-        <Database class="w-5 h-5 text-emerald-600" /> Sambungan Google Spreadsheet
+        <Database class="w-5 h-5 text-emerald-600" /> Sambungan Google Spreadsheet / AppSheet
       </h3>
 
       <div class="space-y-4">
+        <!-- Status Info Banner -->
+        <div class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 rounded-2xl flex items-start gap-3">
+          <Zap class="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+          <div class="text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
+            <p class="font-bold">Otomatisasi Real-Time Aktif</p>
+            <p class="text-emerald-700 dark:text-emerald-300 leading-relaxed">
+              Setelah Web App URL disimpan di bawah ini, setiap data transaksi atau pelanggan yang dimasukkan melalui website akan <strong>otomatis langsung tersimpan ke Google Spreadsheet / AppSheet</strong> secara real-time.
+            </p>
+          </div>
+        </div>
+
         <!-- GAS Web App URL Input -->
         <div>
           <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
@@ -227,7 +246,7 @@
             class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition disabled:opacity-50"
           >
             <UploadCloud class="w-3.5 h-3.5 {pushingData ? 'animate-bounce' : ''}" />
-            Kirim Semua Data ke Spreadsheet
+            Kirim & Sinkronkan Semua Data
           </button>
         </div>
 

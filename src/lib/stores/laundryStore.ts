@@ -3,23 +3,7 @@ import type { Customer, Order, Service, Settings, OrderStatus, ToastMessage } fr
 import { generateInvoiceNumber } from '$utils/formatters';
 import { fetchFromGAS, postToGAS } from '$services/api';
 
-const INITIAL_CUSTOMERS: Customer[] = [
-  { id: 'CUST-001', nama: 'Budi Santoso', hp: '081234567890', alamat: 'Jl. Sudirman No. 45, Jakarta Selatan', created_at: '2026-08-01' },
-  { id: 'CUST-002', nama: 'Siti Rahmawati', hp: '085712345678', alamat: 'Jl. Mawar Indah Blok B3, Bandung', created_at: '2026-08-02' },
-  { id: 'CUST-003', nama: 'Ahmad Rizky', hp: '081987654321', alamat: 'Gg. Melati No. 12, Surabaya', created_at: '2026-08-03' },
-  { id: 'CUST-004', nama: 'Dewi Lestari', hp: '082199887766', alamat: 'Jl. Anggrek No. 88, Semarang', created_at: '2026-08-04' },
-  { id: 'CUST-005', nama: 'Eko Prasetyo', hp: '083811223344', alamat: 'Komplek Asri No. 5, Yogyakarta', created_at: '2026-08-05' }
-];
-
-const INITIAL_SERVICES: Service[] = [
-  { id: 'SRV-001', nama_layanan: 'Cuci Komplit (Cuci + Setrika)', harga_perkg: 8000, estimasi_hari: 2, aktif: true },
-  { id: 'SRV-002', nama_layanan: 'Cuci Kering (Tanpa Setrika)', harga_perkg: 5000, estimasi_hari: 1, aktif: true },
-  { id: 'SRV-003', nama_layanan: 'Setrika Saja', harga_perkg: 4000, estimasi_hari: 1, aktif: true },
-  { id: 'SRV-004', nama_layanan: 'Bedcover & Selimut', harga_perkg: 25000, estimasi_hari: 2, aktif: true },
-  { id: 'SRV-005', nama_layanan: 'Express 1 Hari', harga_perkg: 12000, estimasi_hari: 1, aktif: true }
-];
-
-const INITIAL_SETTINGS: Settings = {
+const DEFAULT_SETTINGS: Settings = {
   nama_laundry: 'SVRA Laundry',
   alamat: 'Jl. Boulevard Raya No. 88, Jakarta Selatan',
   telepon: '0812-8888-9999',
@@ -30,150 +14,61 @@ const INITIAL_SETTINGS: Settings = {
   gas_script_url: ''
 };
 
-const INITIAL_ORDERS: Order[] = [
-  {
-    id: 'ORD-001',
-    invoice: 'INV-20260807-001',
-    tanggal: '2026-08-07',
-    customer_id: 'CUST-001',
-    customer_nama: 'Budi Santoso',
-    customer_hp: '081234567890',
-    service_id: 'SRV-001',
-    service_nama: 'Cuci Komplit (Cuci + Setrika)',
-    berat: 4.5,
-    harga: 8000,
-    subtotal: 36000,
-    diskon: 0,
-    total: 36000,
-    status: 'Masuk',
-    estimasi: '2026-08-09',
-    catatan: 'Wangi Lavender, lipat rapi',
-    created_at: '2026-08-07 08:30',
-    updated_at: '2026-08-07 08:30'
-  },
-  {
-    id: 'ORD-002',
-    invoice: 'INV-20260807-002',
-    tanggal: '2026-08-07',
-    customer_id: 'CUST-002',
-    customer_nama: 'Siti Rahmawati',
-    customer_hp: '085712345678',
-    service_id: 'SRV-005',
-    service_nama: 'Express 1 Hari',
-    berat: 3.0,
-    harga: 12000,
-    subtotal: 36000,
-    diskon: 2000,
-    total: 34000,
-    status: 'Dicuci',
-    estimasi: '2026-08-08',
-    catatan: 'Harus selesai besok sore',
-    created_at: '2026-08-07 09:15',
-    updated_at: '2026-08-07 10:00'
-  },
-  {
-    id: 'ORD-003',
-    invoice: 'INV-20260806-003',
-    tanggal: '2026-08-06',
-    customer_id: 'CUST-003',
-    customer_nama: 'Ahmad Rizky',
-    customer_hp: '081987654321',
-    service_id: 'SRV-001',
-    service_nama: 'Cuci Komplit (Cuci + Setrika)',
-    berat: 6.0,
-    harga: 8000,
-    subtotal: 48000,
-    diskon: 5000,
-    total: 43000,
-    status: 'Disetrika',
-    estimasi: '2026-08-08',
-    catatan: 'Pisahkan kemeja putih',
-    created_at: '2026-08-06 14:20',
-    updated_at: '2026-08-07 07:45'
-  },
-  {
-    id: 'ORD-004',
-    invoice: 'INV-20260806-002',
-    tanggal: '2026-08-06',
-    customer_id: 'CUST-004',
-    customer_nama: 'Dewi Lestari',
-    customer_hp: '082199887766',
-    service_id: 'SRV-003',
-    service_nama: 'Setrika Saja',
-    berat: 5.0,
-    harga: 4000,
-    subtotal: 20000,
-    diskon: 0,
-    total: 20000,
-    status: 'Selesai',
-    estimasi: '2026-08-07',
-    catatan: 'Sudah dihubungi via WA',
-    created_at: '2026-08-06 11:00',
-    updated_at: '2026-08-07 08:00'
-  },
-  {
-    id: 'ORD-005',
-    invoice: 'INV-20260805-001',
-    tanggal: '2026-08-05',
-    customer_id: 'CUST-005',
-    customer_nama: 'Eko Prasetyo',
-    customer_hp: '083811223344',
-    service_id: 'SRV-001',
-    service_nama: 'Cuci Komplit (Cuci + Setrika)',
-    berat: 8.0,
-    harga: 8000,
-    subtotal: 64000,
-    diskon: 4000,
-    total: 60000,
-    status: 'Diambil',
-    estimasi: '2026-08-07',
-    catatan: 'Lunas',
-    created_at: '2026-08-05 16:30',
-    updated_at: '2026-08-07 09:30'
-  }
-];
-
-// Helper to load from LocalStorage with fallback
-function loadLocal<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const item = localStorage.getItem(`laundry_${key}`);
-    if (!item) return fallback;
-    const parsed = JSON.parse(item);
-    if (key === 'settings') {
-      if (!parsed.nama_laundry || parsed.nama_laundry === 'ROYAL FRESH LAUNDRY' || parsed.nama_laundry === 'Fresh Laundry System') {
-        parsed.nama_laundry = 'SVRA Laundry';
-      }
-      if (parsed.logo === '🧺') {
-        parsed.logo = '';
-      }
-    }
-    return parsed;
-  } catch (e) {
-    return fallback;
-  }
-}
-
-function saveLocal<T>(key: string, value: T) {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(`laundry_${key}`, JSON.stringify(value));
-  } catch (e) { }
-}
-
-export const customers = writable<Customer[]>(loadLocal('customers', INITIAL_CUSTOMERS));
-export const services = writable<Service[]>(loadLocal('services', INITIAL_SERVICES));
-export const orders = writable<Order[]>(loadLocal('orders', INITIAL_ORDERS));
-export const settings = writable<Settings>(loadLocal('settings', INITIAL_SETTINGS));
+export const customers = writable<Customer[]>([]);
+export const services = writable<Service[]>([]);
+export const orders = writable<Order[]>([]);
+export const settings = writable<Settings>(DEFAULT_SETTINGS);
 export const toasts = writable<ToastMessage[]>([]);
 export const isLoading = writable<boolean>(false);
 export const globalSearch = writable<string>('');
 
-// Auto-subscribe to save to LocalStorage
-customers.subscribe((val) => saveLocal('customers', val));
-services.subscribe((val) => saveLocal('services', val));
-orders.subscribe((val) => saveLocal('orders', val));
-settings.subscribe((val) => saveLocal('settings', val));
+// Purge any residual LocalStorage data
+if (typeof window !== 'undefined') {
+  try {
+    localStorage.removeItem('laundry_customers');
+    localStorage.removeItem('laundry_services');
+    localStorage.removeItem('laundry_orders');
+    localStorage.removeItem('laundry_settings');
+  } catch (e) {}
+}
+
+// Fetch all data from SQLite Database API
+export async function loadDataFromDb() {
+  if (typeof window === 'undefined') return;
+  isLoading.set(true);
+  try {
+    const res = await fetch('/api/db');
+    const json = await res.json();
+    if (json.success && json.data) {
+      if (Array.isArray(json.data.customers)) customers.set(json.data.customers);
+      if (Array.isArray(json.data.services)) services.set(json.data.services);
+      if (Array.isArray(json.data.orders)) orders.set(json.data.orders);
+      if (json.data.settings) settings.set(json.data.settings);
+    }
+  } catch (err) {
+    console.error('[Database API] Error loading data from DB:', err);
+  } finally {
+    isLoading.set(false);
+  }
+}
+
+// Auto load data on client startup
+if (typeof window !== 'undefined') {
+  loadDataFromDb();
+}
+
+// Save action to backend SQLite DB
+async function saveToDbApi(action: string, payload: any) {
+  try {
+    await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, payload })
+    });
+  } catch (err) {
+    console.error(`[Database API] Failed to persist action ${action}:`, err);
+  }
+}
 
 // Toast helper
 export function addToast(title: string, message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success', duration = 3500) {
@@ -216,7 +111,7 @@ export const stats = derived([orders, customers], ([$orders, $customers]) => {
   };
 });
 
-// Sync Store with GAS API if configured
+// Sync Store with GAS API (Google Spreadsheet / AppSheet) if configured
 export async function syncFromGAS() {
   const currentSettings = get(settings);
   if (!currentSettings.gas_script_url) return;
@@ -231,12 +126,21 @@ export async function syncFromGAS() {
 
     if (custRes.status === 'fulfilled' && custRes.value.success && Array.isArray(custRes.value.data)) {
       customers.set(custRes.value.data);
+      for (const c of custRes.value.data) {
+        saveToDbApi('addCustomer', c);
+      }
     }
     if (srvRes.status === 'fulfilled' && srvRes.value.success && Array.isArray(srvRes.value.data)) {
       services.set(srvRes.value.data);
+      for (const s of srvRes.value.data) {
+        saveToDbApi('addService', s);
+      }
     }
     if (ordRes.status === 'fulfilled' && ordRes.value.success && Array.isArray(ordRes.value.data)) {
       orders.set(ordRes.value.data);
+      for (const o of ordRes.value.data) {
+        saveToDbApi('addOrder', o);
+      }
     }
 
     addToast('Sinkronisasi Sukses', 'Data berhasil diperbarui dari Google Spreadsheet', 'success');
@@ -288,7 +192,7 @@ export async function pushAllToGAS() {
       await postToGAS(currentSettings.gas_script_url, 'addService', s);
     }
 
-    addToast('Sync Berhasil', 'Seluruh data lokal berhasil disimpan ke Google Spreadsheet!', 'success');
+    addToast('Sync Berhasil', 'Seluruh data berhasil disimpan ke Google Spreadsheet!', 'success');
   } catch (err: any) {
     addToast('Sync Gagal', err.message || 'Terjadi kesalahan saat upload ke Google Spreadsheet.', 'error');
   } finally {
@@ -305,6 +209,7 @@ export function addCustomer(cust: Omit<Customer, 'id' | 'created_at'>) {
     created_at: new Date().toISOString().slice(0, 10)
   };
   customers.update((all) => [newCust, ...all]);
+  saveToDbApi('addCustomer', newCust);
   addToast('Berhasil', `Pelanggan ${cust.nama} berhasil ditambahkan!`, 'success');
 
   const currentSettings = get(settings);
@@ -318,6 +223,7 @@ export function updateCustomer(id: string, cust: Partial<Customer>) {
   customers.update((all) =>
     all.map((c) => (c.id === id ? { ...c, ...cust } : c))
   );
+  saveToDbApi('updateCustomer', { id, ...cust });
   addToast('Tersimpan', 'Data customer berhasil diperbarui!', 'success');
 
   const currentSettings = get(settings);
@@ -328,6 +234,7 @@ export function updateCustomer(id: string, cust: Partial<Customer>) {
 
 export function deleteCustomer(id: string) {
   customers.update((all) => all.filter((c) => c.id !== id));
+  saveToDbApi('deleteCustomer', { id });
   addToast('Dihapus', 'Pelanggan berhasil dihapus.', 'info');
 
   const currentSettings = get(settings);
@@ -351,6 +258,7 @@ export function createOrder(orderInput: Omit<Order, 'id' | 'invoice' | 'created_
   };
 
   orders.update((all) => [newOrder, ...all]);
+  saveToDbApi('addOrder', newOrder);
   addToast('Order Berhasil', `Nota ${invoice} telah dibuat. Status: ${newOrder.status}`, 'success');
 
   const currentSettings = get(settings);
@@ -374,6 +282,7 @@ export function updateOrderStatus(orderId: string, newStatus: OrderStatus) {
       return o;
     })
   );
+  saveToDbApi('updateOrderStatus', { id: orderId, status: newStatus, updated_at: now });
 
   addToast('Status Diperbarui', `Nota ${updatedInvoice} diubah menjadi "${newStatus}"`, 'success');
 
@@ -385,6 +294,7 @@ export function updateOrderStatus(orderId: string, newStatus: OrderStatus) {
 
 export function deleteOrder(orderId: string) {
   orders.update((all) => all.filter((o) => o.id !== orderId));
+  saveToDbApi('deleteOrder', { id: orderId });
   addToast('Order Dihapus', 'Order cucian telah dihapus dari sistem', 'info');
 
   const currentSettings = get(settings);
@@ -395,6 +305,7 @@ export function deleteOrder(orderId: string) {
 
 export function updateSettings(newSettings: Partial<Settings>) {
   settings.update((s) => ({ ...s, ...newSettings }));
+  saveToDbApi('updateSettings', newSettings);
   addToast('Pengaturan Tersimpan', 'Pengaturan aplikasi laundry berhasil diperbarui!', 'success');
 
   const currentSettings = get(settings);

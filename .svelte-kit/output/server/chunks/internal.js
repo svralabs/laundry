@@ -103,7 +103,7 @@ const options = {
     app: ({ head, body, assets, nonce, env }) => '<!DOCTYPE html>\n<html lang="id" class="light">\n	<head>\n		<meta charset="utf-8" />\n		<link rel="icon" href="' + assets + '/favicon.png" />\n		<meta name="viewport" content="width=device-width, initial-scale=1" />\n		<title>SVRA Laundry - Laundry Management System</title>\n\n		<!-- Google Fonts -->\n		<link rel="preconnect" href="https://fonts.googleapis.com">\n		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n		<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">\n\n		' + head + '\n	</head>\n	<body data-sveltekit-preload-data="hover" class="bg-slate-50 text-slate-800 antialiased font-sans min-h-screen selection:bg-blue-500 selection:text-white">\n		<div style="display: contents">' + body + "</div>\n	</body>\n</html>\n",
     error
   },
-  version_hash: "uulv80"
+  version_hash: "1mcignm"
 };
 async function get_hooks() {
   let handle;

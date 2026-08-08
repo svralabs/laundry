@@ -56,60 +56,6 @@ function Arrow_up_right($$renderer, $$props) {
     }
   ]));
 }
-function Dollar_sign($$renderer, $$props) {
-  const $$sanitized_props = sanitize_props($$props);
-  /**
-   * @license lucide-svelte v0.474.0 - ISC
-   *
-   * ISC License
-   *
-   * Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather (MIT). All other copyright (c) for Lucide are held by Lucide Contributors 2022.
-   *
-   * Permission to use, copy, modify, and/or distribute this software for any
-   * purpose with or without fee is hereby granted, provided that the above
-   * copyright notice and this permission notice appear in all copies.
-   *
-   * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-   * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-   * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-   * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-   * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-   * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-   * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-   *
-   */
-  const iconNode = [
-    ["line", { "x1": "12", "x2": "12", "y1": "2", "y2": "22" }],
-    [
-      "path",
-      { "d": "M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" }
-    ]
-  ];
-  Icon($$renderer, spread_props([
-    { name: "dollar-sign" },
-    $$sanitized_props,
-    {
-      /**
-       * @component @name DollarSign
-       * @description Lucide SVG icon component, renders SVG Element with children.
-       *
-       * @preview ![img](data:image/svg+xml;base64,PHN2ZyAgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIgogIHdpZHRoPSIyNCIKICBoZWlnaHQ9IjI0IgogIHZpZXdCb3g9IjAgMCAyNCAyNCIKICBmaWxsPSJub25lIgogIHN0cm9rZT0iIzAwMCIgc3R5bGU9ImJhY2tncm91bmQtY29sb3I6ICNmZmY7IGJvcmRlci1yYWRpdXM6IDJweCIKICBzdHJva2Utd2lkdGg9IjIiCiAgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIgogIHN0cm9rZS1saW5lam9pbj0icm91bmQiCj4KICA8bGluZSB4MT0iMTIiIHgyPSIxMiIgeTE9IjIiIHkyPSIyMiIgLz4KICA8cGF0aCBkPSJNMTcgNUg5LjVhMy41IDMuNSAwIDAgMCAwIDdoNWEzLjUgMy41IDAgMCAxIDAgN0g2IiAvPgo8L3N2Zz4K) - https://lucide.dev/icons/dollar-sign
-       * @see https://lucide.dev/guide/packages/lucide-svelte - Documentation
-       *
-       * @param {Object} props - Lucide icons props and any valid SVG attribute
-       * @returns {FunctionalComponent} Svelte component
-       *
-       */
-      iconNode,
-      children: ($$renderer2) => {
-        $$renderer2.push(`<!--[-->`);
-        slot($$renderer2, $$props, "default", {});
-        $$renderer2.push(`<!--]-->`);
-      },
-      $$slots: { default: true }
-    }
-  ]));
-}
 function Loader_circle($$renderer, $$props) {
   const $$sanitized_props = sanitize_props($$props);
   /**
@@ -319,20 +265,27 @@ function StatCard($$renderer, $$props) {
   let title = $$props["title"];
   let value = $$props["value"];
   let subtitle = fallback($$props["subtitle"], "");
-  let icon = $$props["icon"];
+  let icon = fallback($$props["icon"], null);
   let iconColor = fallback($$props["iconColor"], "text-blue-600 bg-blue-50 dark:bg-blue-950/60");
   let trend = fallback($$props["trend"], "");
   let trendUp = fallback($$props["trendUp"], true);
-  $$renderer.push(`<div class="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300 group hover:-translate-y-0.5"><div class="flex items-center justify-between gap-3"><div class="min-w-0 flex-1"><p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 truncate">${escape_html(title)}</p> <h3 class="text-lg sm:text-xl xl:text-2xl font-extrabold text-slate-800 dark:text-white mt-1 tracking-tight truncate">${escape_html(value)}</h3></div> <div${attr_class(`w-11 h-11 rounded-xl flex items-center justify-center ${stringify(iconColor)} transition-transform group-hover:scale-105 shadow-sm shrink-0`)}>`);
+  $$renderer.push(`<div class="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-300 group hover:-translate-y-0.5"><div class="flex items-center justify-between gap-3"><div class="min-w-0 flex-1"><p class="text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 truncate">${escape_html(title)}</p> <h3 class="text-base sm:text-lg xl:text-xl font-extrabold text-slate-800 dark:text-white mt-1 tracking-tight truncate">${escape_html(value)}</h3></div> `);
   if (icon) {
-    $$renderer.push("<!--[-->");
-    icon($$renderer, { class: "w-5 h-5" });
-    $$renderer.push("<!--]-->");
+    $$renderer.push("<!--[0-->");
+    $$renderer.push(`<div${attr_class(`w-11 h-11 rounded-xl flex items-center justify-center ${stringify(iconColor)} transition-transform group-hover:scale-105 shadow-sm shrink-0`)}>`);
+    if (icon) {
+      $$renderer.push("<!--[-->");
+      icon($$renderer, { class: "w-5 h-5" });
+      $$renderer.push("<!--]-->");
+    } else {
+      $$renderer.push("<!--[!-->");
+      $$renderer.push("<!--]-->");
+    }
+    $$renderer.push(`</div>`);
   } else {
-    $$renderer.push("<!--[!-->");
-    $$renderer.push("<!--]-->");
+    $$renderer.push("<!--[-1-->");
   }
-  $$renderer.push(`</div></div> `);
+  $$renderer.push(`<!--]--></div> `);
   if (subtitle || trend) {
     $$renderer.push("<!--[0-->");
     $$renderer.push(`<div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">`);
@@ -386,16 +339,16 @@ function _page($$renderer, $$props) {
     recentOrders = filteredOrders.slice(0, 5);
     store_get($$store_subs ??= {}, "$customers", customers).slice(0, 5);
     activeLaundryProgress = filteredOrders.filter((o) => o.status !== "Diambil").slice(0, 4);
-    $$renderer2.push(`<div class="space-y-6"><div class="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 rounded-3xl p-6 sm:p-8 text-white shadow-lg border border-blue-500/30"><div class="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4"><div><h1 class="text-xl sm:text-2xl font-extrabold tracking-tight">Ringkasan Dashboard</h1> <p class="text-xs sm:text-sm text-blue-100/90 mt-1">Pantau performa usaha laundry kiloan secara real-time &amp; efisien.</p></div> <div class="flex items-center gap-3"><a href="/input" class="inline-flex items-center gap-2 px-4.5 py-2.5 bg-white text-blue-700 hover:bg-blue-50 font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition active:scale-95">`);
+    $$renderer2.push(`<div class="space-y-6"><div class="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-800 rounded-3xl p-6 sm:p-8 text-white shadow-lg border border-blue-500/30"><div class="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4"><div><h1 class="text-xl sm:text-2xl font-extrabold tracking-tight">Ringkasan Usaha Laundry</h1> <p class="text-xs sm:text-sm text-blue-100/90 mt-1">Pantau perkembangan usaha laundry kiloan Anda secara rapi dan mudah.</p></div> <div class="flex items-center gap-3"><a href="/input" class="inline-flex items-center gap-2 px-4.5 py-2.5 bg-white text-blue-700 hover:bg-blue-50 font-extrabold text-xs sm:text-sm rounded-xl shadow-md transition active:scale-95">`);
     Plus($$renderer2, { class: "w-4 h-4" });
-    $$renderer2.push(`<!----> Order Cucian Baru</a></div></div> <div class="absolute -right-10 -bottom-10 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none"></div></div> <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-4">`);
+    $$renderer2.push(`<!----> Tambah Transaksi Baru</a></div></div> <div class="absolute -right-10 -bottom-10 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none"></div></div> <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-4">`);
     StatCard($$renderer2, {
-      title: "Total Customer",
+      title: "Total Pelanggan",
       value: (
         // Chart Mock Data Generators (Weekly Orders & Revenue)
         store_get($$store_subs ??= {}, "$stats", stats).totalCustomers
       ),
-      subtitle: "Terdaftar",
+      subtitle: "Orang terdaftar",
       icon: Users,
       iconColor: "text-blue-600 bg-blue-50 dark:bg-blue-950/60",
       trend: "+12%",
@@ -403,12 +356,12 @@ function _page($$renderer, $$props) {
     });
     $$renderer2.push(`<!----> `);
     StatCard($$renderer2, {
-      title: "Order Hari Ini",
+      title: "Pesanan Hari Ini",
       value: store_get($$store_subs ??= {}, "$stats", stats).todayOrders,
       subtitle: "Nota masuk",
       icon: Shopping_bag,
       iconColor: "text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60",
-      trend: "+5 order",
+      trend: "+5 nota",
       trendUp: true
     });
     $$renderer2.push(`<!----> `);
@@ -431,9 +384,7 @@ function _page($$renderer, $$props) {
     StatCard($$renderer2, {
       title: "Omset Hari Ini",
       value: formatRupiah(store_get($$store_subs ??= {}, "$stats", stats).pendapatanHariIni),
-      subtitle: "Estimasi bruto",
-      icon: Dollar_sign,
-      iconColor: "text-teal-600 bg-teal-50 dark:bg-teal-950/60",
+      subtitle: "Total hari ini",
       trend: "+8%",
       trendUp: true
     });
@@ -441,28 +392,26 @@ function _page($$renderer, $$props) {
     StatCard($$renderer2, {
       title: "Omset Bulan Ini",
       value: formatRupiah(store_get($$store_subs ??= {}, "$stats", stats).pendapatanBulanIni),
-      subtitle: "Bulan Berjalan",
-      icon: Trending_up,
-      iconColor: "text-purple-600 bg-purple-50 dark:bg-purple-950/60",
+      subtitle: "Total bulan ini",
       trend: "+18%",
       trendUp: true
     });
-    $$renderer2.push(`<!----></div> <div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card space-y-4"><div class="flex items-center justify-between"><div><h3 class="text-base font-extrabold text-slate-800 dark:text-white">Grafik Order Mingguan</h3> <p class="text-xs text-slate-400">Jumlah transaksi masuk 7 hari terakhir</p></div> <span class="px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 rounded-full border border-blue-200 dark:border-blue-800">Minggu Ini</span></div> <div class="h-48 flex items-end justify-between gap-3 pt-6 px-2"><!--[-->`);
+    $$renderer2.push(`<!----></div> <div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card space-y-4"><div class="flex items-center justify-between"><div><h3 class="text-base font-extrabold text-slate-800 dark:text-white">Grafik Pesanan Mingguan</h3> <p class="text-xs text-slate-400">Jumlah nota cucian 7 hari terakhir</p></div> <span class="px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 rounded-full border border-blue-200 dark:border-blue-800">Minggu Ini</span></div> <div class="h-48 flex items-end justify-between gap-3 pt-6 px-2"><!--[-->`);
     const each_array = ensure_array_like(weeklyData);
     for (let $$index = 0, $$length = each_array.length; $$index < $$length; $$index++) {
       let item = each_array[$$index];
       const heightPct = item.orders / maxWeeklyOrders * 100;
       $$renderer2.push(`<div class="flex-1 flex flex-col items-center gap-2 group"><span class="text-[10px] font-bold text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity">${escape_html(item.orders)}</span> <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-xl h-36 flex items-end overflow-hidden"><div class="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-xl group-hover:from-blue-700 group-hover:to-blue-500 transition-all duration-500 shadow-md"${attr_style(`height: ${stringify(heightPct)}%`)}></div></div> <span class="text-xs font-bold text-slate-600 dark:text-slate-400">${escape_html(item.day)}</span></div>`);
     }
-    $$renderer2.push(`<!--]--></div></div> <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card flex flex-col justify-between space-y-4"><div class="flex items-center justify-between"><div><h3 class="text-base font-extrabold text-slate-800 dark:text-white">Trend Pendapatan (Omzet)</h3> <p class="text-xs text-slate-400">Pertumbuhan nilai penjualan 7 hari terakhir</p></div> <span class="px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 rounded-full border border-emerald-200 dark:border-emerald-800 shrink-0">+24.5%</span></div> <div class="space-y-3 pt-2"><!--[-->`);
+    $$renderer2.push(`<!--]--></div></div> <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card flex flex-col justify-between space-y-4"><div class="flex items-center justify-between"><div><h3 class="text-base font-extrabold text-slate-800 dark:text-white">Grafik Penjualan Mingguan</h3> <p class="text-xs text-slate-400">Nilai pendapatan 7 hari terakhir</p></div> <span class="px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 rounded-full border border-emerald-200 dark:border-emerald-800 shrink-0">+24.5%</span></div> <div class="space-y-3 pt-2"><!--[-->`);
     const each_array_1 = ensure_array_like(weeklyData);
     for (let $$index_1 = 0, $$length = each_array_1.length; $$index_1 < $$length; $$index_1++) {
       let item = each_array_1[$$index_1];
       $$renderer2.push(`<div class="space-y-1"><div class="flex items-center justify-between text-xs font-bold"><span class="text-slate-600 dark:text-slate-400 w-10">${escape_html(item.day)}</span> <span class="text-slate-800 dark:text-white font-mono">${escape_html(formatRupiah(item.rev))}</span></div> <div class="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"><div class="h-full bg-gradient-to-r from-teal-500 via-blue-500 to-indigo-600 rounded-full transition-all duration-500 shadow-sm"${attr_style(`width: ${stringify(Math.max(5, item.rev / 92e4 * 100))}%`)}></div></div></div>`);
     }
-    $$renderer2.push(`<!--]--></div></div></div> <div class="grid grid-cols-1 lg:grid-cols-3 gap-6"><div class="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card space-y-4"><div class="flex items-center justify-between"><div><h3 class="text-base font-extrabold text-slate-800 dark:text-white">Order Terbaru</h3> <p class="text-xs text-slate-400">5 Transaksi laundry masuk paling akhir</p></div> <a href="/history" class="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">Lihat Semua `);
+    $$renderer2.push(`<!--]--></div></div></div> <div class="grid grid-cols-1 lg:grid-cols-3 gap-6"><div class="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card space-y-4"><div class="flex items-center justify-between"><div><h3 class="text-base font-extrabold text-slate-800 dark:text-white">Pesanan Terbaru</h3> <p class="text-xs text-slate-400">5 Transaksi laundry yang baru masuk</p></div> <a href="/history" class="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1">Lihat Semua `);
     Arrow_up_right($$renderer2, { class: "w-4 h-4" });
-    $$renderer2.push(`<!----></a></div> <div class="overflow-x-auto"><table class="w-full text-left border-collapse"><thead><tr class="border-b border-slate-100 dark:border-slate-800 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"><th class="py-3 px-3">No. Nota</th><th class="py-3 px-3">Customer</th><th class="py-3 px-3">Layanan</th><th class="py-3 px-3">Total</th><th class="py-3 px-3">Status</th></tr></thead><tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-xs">`);
+    $$renderer2.push(`<!----></a></div> <div class="overflow-x-auto"><table class="w-full text-left border-collapse"><thead><tr class="border-b border-slate-100 dark:border-slate-800 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"><th class="py-3 px-3">No. Nota</th><th class="py-3 px-3">Pelanggan</th><th class="py-3 px-3">Layanan</th><th class="py-3 px-3">Total</th><th class="py-3 px-3">Status</th></tr></thead><tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-xs">`);
     const each_array_2 = ensure_array_like(recentOrders);
     if (each_array_2.length !== 0) {
       $$renderer2.push("<!--[-->");
@@ -474,9 +423,9 @@ function _page($$renderer, $$props) {
       }
     } else {
       $$renderer2.push("<!--[!-->");
-      $$renderer2.push(`<tr><td colspan="5" class="py-6 text-center text-slate-400">Belum ada data order.</td></tr>`);
+      $$renderer2.push(`<tr><td colspan="5" class="py-6 text-center text-slate-400">Belum ada data pesanan.</td></tr>`);
     }
-    $$renderer2.push(`<!--]--></tbody></table></div></div> <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card space-y-4"><div class="flex items-center justify-between"><div><h3 class="text-base font-extrabold text-slate-800 dark:text-white">Progress Cucian</h3> <p class="text-xs text-slate-400">Status pengerjaan cucian</p></div> <a href="/status" class="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">Detail</a></div> <div class="space-y-4">`);
+    $$renderer2.push(`<!--]--></tbody></table></div></div> <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card space-y-4"><div class="flex items-center justify-between"><div><h3 class="text-base font-extrabold text-slate-800 dark:text-white">Status Pengerjaan Cucian</h3> <p class="text-xs text-slate-400">Proses cucian yang sedang dikerjakan</p></div> <a href="/status" class="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline">Detail</a></div> <div class="space-y-4">`);
     const each_array_3 = ensure_array_like(activeLaundryProgress);
     if (each_array_3.length !== 0) {
       $$renderer2.push("<!--[-->");

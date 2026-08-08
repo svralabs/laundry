@@ -11,7 +11,7 @@ function StatusBadge($$renderer, $$props) {
       md: "px-2.5 py-1 text-xs font-bold",
       lg: "px-3.5 py-1.5 text-sm font-bold"
     }[size];
-    $$renderer2.push(`<span${attr_class(`inline-flex items-center gap-1.5 rounded-full border shadow-sm transition-all duration-200 $${stringify(colors.bg)} $${stringify(colors.text)} $${stringify(colors.border)} $${stringify(sizeClasses)}`)}><span${attr_class(`w-1.5 h-1.5 rounded-full $${stringify(colors.dot)} animate-pulse`)}></span> ${escape_html(status)}</span>`);
+    $$renderer2.push(`<span${attr_class(`inline-flex items-center gap-1.5 rounded-full border shadow-sm transition-all duration-200 ${stringify(colors.bg)} ${stringify(colors.text)} ${stringify(colors.border)} ${stringify(sizeClasses)}`)}><span${attr_class(`w-1.5 h-1.5 rounded-full ${stringify(colors.dot)} animate-pulse`)}></span> ${escape_html(status)}</span>`);
     bind_props($$props, { status, size });
   });
 }

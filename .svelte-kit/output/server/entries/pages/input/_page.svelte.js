@@ -2,8 +2,8 @@ import { s as sanitize_props, a as spread_props, b as slot, d as store_get, u as
 import { I as Icon, e as generateInvoiceNumber, o as orders, s as settings, h as services, c as customers, b as formatRupiah } from "../../../chunks/Icon.js";
 import "jspdf";
 import "jspdf-autotable";
-import { U as User_plus, C as CustomerModal } from "../../../chunks/CustomerModal.js";
 import dayjs from "dayjs";
+import { U as User_plus, C as CustomerModal } from "../../../chunks/CustomerModal.js";
 import { S as Shirt, C as Calendar } from "../../../chunks/shirt.js";
 import { S as Save } from "../../../chunks/save.js";
 import { P as Printer } from "../../../chunks/printer.js";
