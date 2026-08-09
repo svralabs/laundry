@@ -205,7 +205,7 @@ function invalidateCache(key) {
  * Baca hanya slice baris yang diminta — tidak load seluruh sheet ke memory.
  * Menggunakan getRange(startRow, startCol, numRows, numCols) secara tepat.
  */
-function getPagedData(sheetName, page, pageSize, q) {
+function getPagedData(sheetName, page, pageSize) {
   var sheet = getOrCreateSheet(sheetName);
   var lastRow = sheet.getLastRow();
 
@@ -214,97 +214,48 @@ function getPagedData(sheetName, page, pageSize, q) {
     return { success: true, data: [], meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0 } };
   }
 
+  var totalRows  = lastRow - 1;            // Jumlah row data (tidak termasuk header)
+  var totalPages = Math.ceil(totalRows / pageSize);
+  var startDataRow = (page - 1) * pageSize + 1; // Index data (1-based, relatif ke baris data)
+
+  if (startDataRow > totalRows) {
+    return { success: true, data: [], meta: { total: totalRows, page: page, pageSize: pageSize, totalPages: totalPages } };
+  }
+
+  var sheetStartRow = startDataRow + 1;   // +1 karena baris 1 adalah header
+  var numRows = Math.min(pageSize, totalRows - startDataRow + 1);
   var numCols = HEADERS_MAP[sheetName] ? HEADERS_MAP[sheetName].length : sheet.getLastColumn();
+
   // Ambil header (O(1) — baris tunggal)
   var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
 
-  if (!q) {
-    // Normal Pagination (tanpa pencarian)
-    var totalRows  = lastRow - 1;            
-    var totalPages = Math.ceil(totalRows / pageSize);
-    var startDataRow = (page - 1) * pageSize + 1; 
+  // Ambil hanya slice yang diminta — BUKAN getDataRange()
+  var rawData = sheet.getRange(sheetStartRow, 1, numRows, numCols).getValues();
 
-    if (startDataRow > totalRows) {
-      return { success: true, data: [], meta: { total: totalRows, page: page, pageSize: pageSize, totalPages: totalPages } };
+  var rows = [];
+  for (var i = 0; i < rawData.length; i++) {
+    var row = rawData[i];
+    var obj = {};
+    var hasValue = false;
+    for (var j = 0; j < headers.length; j++) {
+      var val = row[j];
+      if (val instanceof Date) val = val.toISOString().slice(0, 10);
+      obj[headers[j]] = val;
+      if (val !== '') hasValue = true;
     }
-
-    var sheetStartRow = startDataRow + 1;   
-    var numRows = Math.min(pageSize, totalRows - startDataRow + 1);
-    var rawData = sheet.getRange(sheetStartRow, 1, numRows, numCols).getValues();
-
-    var rows = [];
-    for (var i = 0; i < rawData.length; i++) {
-      var row = rawData[i];
-      var obj = {};
-      var hasValue = false;
-      for (var j = 0; j < headers.length; j++) {
-        var val = row[j];
-        if (val instanceof Date) val = val.toISOString().slice(0, 10);
-        obj[headers[j]] = val;
-        if (val !== '') hasValue = true;
-      }
-      if (hasValue) rows.push(obj);
-    }
-
-    return { success: true, data: rows, meta: { total: totalRows, page: page, pageSize: pageSize, totalPages: totalPages } };
-
-  } else {
-    // Pencarian dengan TextFinder (Sangat cepat di level server Google)
-    var finder = sheet.createTextFinder(q).matchCase(false);
-    var matches = finder.findAll();
-    var matchRows = {};
-    for (var m = 0; m < matches.length; m++) {
-      var r = matches[m].getRow();
-      if (r > 1) matchRows[r] = true; // Abaikan pencarian yang ketemu di Header
-    }
-    
-    var uniqueRows = Object.keys(matchRows).map(function(n) { return parseInt(n, 10); });
-    uniqueRows.sort(function(a, b) { return a - b; }); // Urutkan nomor baris dari terkecil ke terbesar
-
-    var totalRows = uniqueRows.length;
-    var totalPages = Math.ceil(totalRows / pageSize);
-    var startIdx = (page - 1) * pageSize;
-    var pageRowIndices = uniqueRows.slice(startIdx, startIdx + pageSize);
-
-    var rows = [];
-    if (pageRowIndices.length > 0) {
-      // Optimasi: Gabungkan request getRange jika barisnya berdekatan (contiguous)
-      var fetchRanges = [];
-      var currentStart = pageRowIndices[0];
-      var currentCount = 1;
-      
-      for (var k = 1; k < pageRowIndices.length; k++) {
-        if (pageRowIndices[k] === currentStart + currentCount) {
-          currentCount++;
-        } else {
-          fetchRanges.push({ r: currentStart, c: currentCount });
-          currentStart = pageRowIndices[k];
-          currentCount = 1;
-        }
-      }
-      fetchRanges.push({ r: currentStart, c: currentCount });
-
-      // Fetch data menggunakan chunk range
-      for (var k = 0; k < fetchRanges.length; k++) {
-        var rg = fetchRanges[k];
-        var dataBlock = sheet.getRange(rg.r, 1, rg.c, numCols).getValues();
-        for (var rIdx = 0; rIdx < dataBlock.length; rIdx++) {
-          var rowData = dataBlock[rIdx];
-          var obj = {};
-          var hasValue = false;
-          for (var j = 0; j < headers.length; j++) {
-            var val = rowData[j];
-            if (val instanceof Date) val = val.toISOString().slice(0, 10);
-            obj[headers[j]] = val;
-            if (val !== '') hasValue = true;
-          }
-          if (hasValue) rows.push(obj);
-        }
-      }
-    }
-    
-    return { success: true, data: rows, meta: { total: totalRows, page: page, pageSize: pageSize, totalPages: totalPages } };
+    if (hasValue) rows.push(obj);
   }
+
+  return {
+    success: true,
+    data: rows,
+    meta: {
+      total:      totalRows,
+      page:       page,
+      pageSize:   pageSize,
+      totalPages: totalPages
+    }
+  };
 }
 
 // ─────────────────────────────────────────────

@@ -85,7 +85,7 @@ export const stats = derived([orders, customers], ([$orders, $customers]) => {
 });
 
 // Fetch all data from GAS API (Initial Load)
-export async function loadDataFromGAS(page = 1, pageSize = 50, append = false) {
+export async function loadDataFromGAS(page = 1, pageSize = 50, append = false, query = '') {
   if (typeof window === 'undefined') return;
   if (!PUBLIC_GAS_URL) {
     console.warn('PUBLIC_GAS_URL is not configured.');
@@ -100,9 +100,9 @@ export async function loadDataFromGAS(page = 1, pageSize = 50, append = false) {
 
   try {
     const [custRes, srvRes, ordRes, setRes] = await Promise.allSettled([
-      fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page: 1, pageSize: 200 }), // usually less customers, load 200
+      fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page: 1, pageSize: 200, q: query }), // usually less customers, load 200
       fetchFromGAS<Service[]>(PUBLIC_GAS_URL, 'getServices'),
-      fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize }),
+      fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, q: query }),
       fetchFromGAS<Settings[]>(PUBLIC_GAS_URL, 'getSettings')
     ]);
 
@@ -146,13 +146,30 @@ export async function loadDataFromGAS(page = 1, pageSize = 50, append = false) {
 export async function loadMoreOrders() {
   const currentMeta = get(paginationState);
   if (!currentMeta.hasMore || currentMeta.isLoadingMore) return;
-  await loadDataFromGAS(currentMeta.page + 1, currentMeta.pageSize, true);
+  const currentQuery = get(globalSearch);
+  await loadDataFromGAS(currentMeta.page + 1, currentMeta.pageSize, true, currentQuery);
 }
 
-// Auto load data on client startup
-if (typeof window !== 'undefined') {
-  loadDataFromGAS();
-}
+// Global Search Debounce Logic
+let searchTimeout: any;
+let isInitialLoad = true;
+
+globalSearch.subscribe((query) => {
+  if (typeof window === 'undefined') return;
+  
+  // Prevent double fetching on initial load since loadDataFromGAS is called on startup
+  if (isInitialLoad) {
+    isInitialLoad = false;
+    loadDataFromGAS(1, 50, false, query);
+    return;
+  }
+
+  if (searchTimeout) clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    // Reset page to 1 when search query changes
+    loadDataFromGAS(1, 50, false, query);
+  }, 500); // 500ms debounce
+});
 
 export async function pushAllToGAS() {
   if (!PUBLIC_GAS_URL) {
