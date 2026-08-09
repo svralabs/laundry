@@ -1,6 +1,6 @@
 <!-- ==================== HALAMAN RIWAYAT & LAPORAN LAUNDRY ==================== -->
 <script lang="ts">
-  import { orders, deleteOrder, globalSearch } from '$stores/laundryStore';
+  import { orders, deleteOrder, globalSearch, paginationState, loadDataFromGAS } from '$stores/laundryStore';
   import type { Order } from '$types/laundry';
   import StatusBadge from '$components/StatusBadge.svelte';
   import ConfirmModal from '$components/ConfirmModal.svelte';
@@ -275,6 +275,25 @@
       </div>
     </div>
   </div>
+
+  <!-- Backend Pagination (Load More) -->
+  {#if $paginationState.page < $paginationState.totalPages}
+    <div class="flex justify-center mt-6">
+      <button
+        type="button"
+        disabled={$paginationState.isLoadingMore}
+        on:click={() => loadDataFromGAS($paginationState.page + 1, $paginationState.pageSize, true)}
+        class="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
+      >
+        {#if $paginationState.isLoadingMore}
+          <div class="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin"></div>
+          Memuat Data Lanjutan...
+        {:else}
+          Muat Data Lanjutan dari Server
+        {/if}
+      </button>
+    </div>
+  {/if}
 </div>
 
 <!-- Confirm Delete Modal -->
