@@ -1,8 +1,5 @@
 {
 	"/": [],
-	"/api/db": [
-		"src/routes/api/db/+server.ts"
-	],
 	"/customers": [],
 	"/history": [],
 	"/input": [],

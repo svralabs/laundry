@@ -1,0 +1,64 @@
+{
+	"version": 3,
+	"routes": [
+		{
+			"src": ".*",
+			"continue": true,
+			"transforms": [
+				{
+					"type": "request.query",
+					"op": "delete",
+					"target": {
+						"key": "__pathname"
+					}
+				}
+			]
+		},
+		{
+			"src": "/_app/immutable/.+",
+			"headers": {
+				"cache-control": "public, immutable, max-age=31536000"
+			}
+		},
+		{
+			"handle": "filesystem"
+		},
+		{
+			"src": "/_app/immutable/.+",
+			"status": 404,
+			"headers": {
+				"cache-control": "no-store"
+			},
+			"continue": false
+		},
+		{
+			"src": "^/?(?:/__data.json)?$",
+			"dest": "/"
+		},
+		{
+			"src": "^/customers/?(?:/__data.json)?$",
+			"dest": "/customers"
+		},
+		{
+			"src": "^/history/?(?:/__data.json)?$",
+			"dest": "/history"
+		},
+		{
+			"src": "^/input/?(?:/__data.json)?$",
+			"dest": "/input"
+		},
+		{
+			"src": "^/settings/?(?:/__data.json)?$",
+			"dest": "/settings"
+		},
+		{
+			"src": "^/status/?(?:/__data.json)?$",
+			"dest": "/status"
+		},
+		{
+			"src": "/.*",
+			"dest": "/![-]/catchall"
+		}
+	],
+	"overrides": {}
+}

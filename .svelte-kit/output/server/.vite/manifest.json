@@ -7,7 +7,8 @@
     "imports": [
       "_root.js",
       "_server.js",
-      "_internal.js"
+      "_internal.js",
+      "_shared-server.js"
     ]
   },
   "_ConfirmModal.js": {
@@ -35,6 +36,7 @@
     "name": "Icon",
     "imports": [
       "_index2.js",
+      "_shared-server.js",
       "_index.js"
     ]
   },
@@ -90,7 +92,8 @@
     "name": "internal",
     "imports": [
       "_root.js",
-      "_server.js"
+      "_server.js",
+      "_shared-server.js"
     ]
   },
   "_list-todo.js": {
@@ -159,6 +162,10 @@
       "_index.js",
       "_Icon.js"
     ]
+  },
+  "_shared-server.js": {
+    "file": "chunks/shared-server.js",
+    "name": "shared-server"
   },
   "_shirt.js": {
     "file": "chunks/shirt.js",
@@ -248,6 +255,7 @@
       "_exports.js",
       "_utils2.js",
       "_index2.js",
+      "_shared-server.js",
       "_internal.js"
     ]
   },
@@ -270,12 +278,13 @@
       "_list-todo.js",
       "_history.js",
       "_settings.js",
+      "_shared-server.js",
       "_circle-check.js",
       "_search.js",
       "_plus.js"
     ],
     "css": [
-      "_app/immutable/assets/_layout.DzmEIAMD.css"
+      "_app/immutable/assets/_layout.DjI7L4_d.css"
     ]
   },
   "src/routes/+page.svelte": {
@@ -347,6 +356,7 @@
     "imports": [
       "_index.js",
       "_Icon.js",
+      "_shared-server.js",
       "_settings.js",
       "_save.js"
     ]

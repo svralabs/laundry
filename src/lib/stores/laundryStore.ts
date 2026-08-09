@@ -25,6 +25,15 @@ export const toasts = writable<ToastMessage[]>([]);
 export const isLoading = writable<boolean>(false);
 export const globalSearch = writable<string>('');
 
+export const paginationState = writable({
+  page: 1,
+  pageSize: 50,
+  total: 0,
+  totalPages: 0,
+  isLoadingMore: false,
+  hasMore: true
+});
+
 // Purge any residual LocalStorage data
 if (typeof window !== 'undefined') {
   try {
@@ -75,20 +84,25 @@ export const stats = derived([orders, customers], ([$orders, $customers]) => {
   };
 });
 
-// Fetch all data from GAS API
-export async function loadDataFromGAS() {
+// Fetch all data from GAS API (Initial Load)
+export async function loadDataFromGAS(page = 1, pageSize = 50, append = false) {
   if (typeof window === 'undefined') return;
   if (!PUBLIC_GAS_URL) {
     console.warn('PUBLIC_GAS_URL is not configured.');
     return;
   }
 
-  isLoading.set(true);
+  if (append) {
+    paginationState.update(s => ({ ...s, isLoadingMore: true }));
+  } else {
+    isLoading.set(true);
+  }
+
   try {
     const [custRes, srvRes, ordRes, setRes] = await Promise.allSettled([
-      fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers'),
+      fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page: 1, pageSize: 200 }), // usually less customers, load 200
       fetchFromGAS<Service[]>(PUBLIC_GAS_URL, 'getServices'),
-      fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders'),
+      fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize }),
       fetchFromGAS<Settings[]>(PUBLIC_GAS_URL, 'getSettings')
     ]);
 
@@ -99,7 +113,23 @@ export async function loadDataFromGAS() {
       services.set(srvRes.value.data);
     }
     if (ordRes.status === 'fulfilled' && ordRes.value.success && Array.isArray(ordRes.value.data)) {
-      orders.set(ordRes.value.data);
+      if (append) {
+        orders.update(existing => [...existing, ...(ordRes.value.data as Order[])]);
+      } else {
+        orders.set(ordRes.value.data);
+      }
+      
+      const meta = ordRes.value.meta;
+      if (meta) {
+        paginationState.set({
+          page: meta.page,
+          pageSize: meta.pageSize,
+          total: meta.total,
+          totalPages: meta.totalPages,
+          isLoadingMore: false,
+          hasMore: meta.page < meta.totalPages
+        });
+      }
     }
     if (setRes.status === 'fulfilled' && setRes.value.success && Array.isArray(setRes.value.data) && setRes.value.data.length > 0) {
       settings.set(setRes.value.data[0]);
@@ -109,7 +139,14 @@ export async function loadDataFromGAS() {
     addToast('Koneksi Gagal', 'Gagal memuat data dari Google Sheets. Periksa URL AppScript kamu.', 'error');
   } finally {
     isLoading.set(false);
+    paginationState.update(s => ({ ...s, isLoadingMore: false }));
   }
+}
+
+export async function loadMoreOrders() {
+  const currentMeta = get(paginationState);
+  if (!currentMeta.hasMore || currentMeta.isLoadingMore) return;
+  await loadDataFromGAS(currentMeta.page + 1, currentMeta.pageSize, true);
 }
 
 // Auto load data on client startup

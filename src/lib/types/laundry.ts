@@ -49,8 +49,15 @@ export interface Settings {
 
 export interface APIResponse<T = any> {
   success: boolean;
-  message: string;
-  data: T;
+  message?: string;
+  data?: T;
+  meta?: {
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+  error?: string;
 }
 
 export interface ToastMessage {
