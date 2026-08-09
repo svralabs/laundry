@@ -46,33 +46,6 @@
     });
   }
 
-  async function handleTestConnection() {
-    if (!publicGasUrl) {
-      addToast('Peringatan', 'PUBLIC_GAS_URL belum dikonfigurasi di Environment Variables.', 'warning');
-      return;
-    }
-    testingConnection = true;
-    connectionStatus = null;
-
-    const res = await testGASConnection(publicGasUrl);
-    testingConnection = false;
-    connectionStatus = res;
-
-    if (res.success) {
-      addToast('Koneksi Sukses', res.message, 'success');
-    } else {
-      addToast('Koneksi Gagal', res.message, 'error');
-    }
-  }
-
-  async function handlePushAll() {
-    handleSaveSettings();
-    if (publicGasUrl) {
-      pushingData = true;
-      await pushAllToGAS();
-      pushingData = false;
-    }
-  }
 </script>
 
 <div class="space-y-6">
@@ -97,7 +70,7 @@
     </button>
   </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div class="max-w-3xl mx-auto">
     <!-- Left Column: Business Profile Settings -->
     <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-card space-y-6">
       <h3 class="text-base font-extrabold text-slate-800 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
@@ -189,78 +162,6 @@
             class="w-full px-4 py-2.5 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-600 outline-none"
           />
         </div>
-      </div>
-    </div>
-
-    <!-- Right Column: Google Apps Script Backend Integration -->
-    <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-card space-y-6">
-      <h3 class="text-base font-extrabold text-slate-800 dark:text-white flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-3">
-        <Database class="w-5 h-5 text-emerald-600" /> Sambungan Google Spreadsheet / AppSheet
-      </h3>
-
-      <div class="space-y-4">
-        <!-- Status Info Banner -->
-        <div class="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 rounded-2xl flex items-start gap-3">
-          <Zap class="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-          <div class="text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
-            <p class="font-bold">Otomatisasi Real-Time Aktif</p>
-            <p class="text-emerald-700 dark:text-emerald-300 leading-relaxed">
-              Konfigurasi AppScript Web URL saat ini menggunakan <strong>Environment Variables (.env)</strong> yang lebih aman untuk Vercel.
-              Semua data akan otomatis disinkronkan langsung ke Google Sheets.
-            </p>
-          </div>
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
-            Status URL Environment Variable
-          </label>
-          {#if publicGasUrl}
-            <div class="px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-700 dark:text-slate-300 text-xs font-mono truncate border border-slate-200 dark:border-slate-700">
-              {publicGasUrl}
-            </div>
-          {:else}
-            <div class="px-4 py-3 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 rounded-xl text-xs border border-amber-200 dark:border-amber-800 font-bold">
-              PUBLIC_GAS_URL belum terdeteksi. Pastikan kamu sudah menyetelnya di pengaturan Environment Vercel.
-            </div>
-          {/if}
-        </div>
-
-        <div class="flex flex-wrap items-center gap-3 mt-4">
-          <button
-            type="button"
-            on:click={handleTestConnection}
-            disabled={testingConnection || !publicGasUrl}
-            class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition disabled:opacity-50"
-          >
-            <RefreshCw class="w-3.5 h-3.5 {testingConnection ? 'animate-spin' : ''}" />
-            Coba Tes Koneksi
-          </button>
-
-          <button
-            type="button"
-            on:click={handlePushAll}
-            disabled={pushingData || !publicGasUrl}
-            class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition disabled:opacity-50"
-          >
-            <UploadCloud class="w-3.5 h-3.5 {pushingData ? 'animate-bounce' : ''}" />
-            Sinkronkan Ulang Semua Data
-          </button>
-        </div>
-
-        {#if connectionStatus}
-          <div
-            class="p-3.5 rounded-2xl text-xs font-bold border flex items-center gap-2.5
-            {connectionStatus.success ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300' : 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300'}"
-          >
-            {#if connectionStatus.success}
-              <CheckCircle2 class="w-4 h-4 text-emerald-600 shrink-0" />
-            {:else}
-              <AlertCircle class="w-4 h-4 text-rose-600 shrink-0" />
-            {/if}
-            <span>{connectionStatus.message}</span>
-          </div>
-        {/if}
       </div>
     </div>
   </div>
