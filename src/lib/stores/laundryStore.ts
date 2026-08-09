@@ -2,6 +2,10 @@ import { writable, derived, get } from 'svelte/store';
 import type { Customer, Order, Service, Settings, OrderStatus, ToastMessage } from '$types/laundry';
 import { generateInvoiceNumber } from '$utils/formatters';
 import { fetchFromGAS, postToGAS } from '$services/api';
+import { env } from '$env/dynamic/public'; // Using dynamic to ensure it reads from process.env on server if needed, or static
+
+// Fallback to empty if not configured in .env
+const PUBLIC_GAS_URL = env.PUBLIC_GAS_URL || '';
 
 const DEFAULT_SETTINGS: Settings = {
   nama_laundry: 'SVRA Laundry',
@@ -10,8 +14,7 @@ const DEFAULT_SETTINGS: Settings = {
   logo: '',
   footer: 'Terima kasih telah memercayakan pakaian Anda kepada SVRA Laundry.',
   default_harga: 8000,
-  default_estimasi: 2,
-  gas_script_url: ''
+  default_estimasi: 2
 };
 
 export const customers = writable<Customer[]>([]);
@@ -32,45 +35,6 @@ if (typeof window !== 'undefined') {
   } catch (e) {}
 }
 
-// Fetch all data from SQLite Database API
-export async function loadDataFromDb() {
-  if (typeof window === 'undefined') return;
-  isLoading.set(true);
-  try {
-    const res = await fetch('/api/db');
-    const json = await res.json();
-    if (json.success && json.data) {
-      if (Array.isArray(json.data.customers)) customers.set(json.data.customers);
-      if (Array.isArray(json.data.services)) services.set(json.data.services);
-      if (Array.isArray(json.data.orders)) orders.set(json.data.orders);
-      if (json.data.settings) settings.set(json.data.settings);
-    }
-  } catch (err) {
-    console.error('[Database API] Error loading data from DB:', err);
-  } finally {
-    isLoading.set(false);
-  }
-}
-
-// Auto load data on client startup
-if (typeof window !== 'undefined') {
-  loadDataFromDb();
-}
-
-// Save action to backend SQLite DB
-async function saveToDbApi(action: string, payload: any) {
-  try {
-    await fetch('/api/db', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, payload })
-    });
-  } catch (err) {
-    console.error(`[Database API] Failed to persist action ${action}:`, err);
-  }
-}
-
-// Toast helper
 export function addToast(title: string, message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success', duration = 3500) {
   const id = Math.random().toString(36).substring(2, 9);
   toasts.update((all) => [...all, { id, title, message, type, duration }]);
@@ -111,50 +75,51 @@ export const stats = derived([orders, customers], ([$orders, $customers]) => {
   };
 });
 
-// Sync Store with GAS API (Google Spreadsheet / AppSheet) if configured
-export async function syncFromGAS() {
-  const currentSettings = get(settings);
-  if (!currentSettings.gas_script_url) return;
+// Fetch all data from GAS API
+export async function loadDataFromGAS() {
+  if (typeof window === 'undefined') return;
+  if (!PUBLIC_GAS_URL) {
+    console.warn('PUBLIC_GAS_URL is not configured.');
+    return;
+  }
 
   isLoading.set(true);
   try {
-    const [custRes, srvRes, ordRes] = await Promise.allSettled([
-      fetchFromGAS<Customer[]>(currentSettings.gas_script_url, 'getCustomers'),
-      fetchFromGAS<Service[]>(currentSettings.gas_script_url, 'getServices'),
-      fetchFromGAS<Order[]>(currentSettings.gas_script_url, 'getOrders')
+    const [custRes, srvRes, ordRes, setRes] = await Promise.allSettled([
+      fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers'),
+      fetchFromGAS<Service[]>(PUBLIC_GAS_URL, 'getServices'),
+      fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders'),
+      fetchFromGAS<Settings[]>(PUBLIC_GAS_URL, 'getSettings')
     ]);
 
     if (custRes.status === 'fulfilled' && custRes.value.success && Array.isArray(custRes.value.data)) {
       customers.set(custRes.value.data);
-      for (const c of custRes.value.data) {
-        saveToDbApi('addCustomer', c);
-      }
     }
     if (srvRes.status === 'fulfilled' && srvRes.value.success && Array.isArray(srvRes.value.data)) {
       services.set(srvRes.value.data);
-      for (const s of srvRes.value.data) {
-        saveToDbApi('addService', s);
-      }
     }
     if (ordRes.status === 'fulfilled' && ordRes.value.success && Array.isArray(ordRes.value.data)) {
       orders.set(ordRes.value.data);
-      for (const o of ordRes.value.data) {
-        saveToDbApi('addOrder', o);
-      }
     }
-
-    addToast('Sinkronisasi Sukses', 'Data berhasil diperbarui dari Google Spreadsheet', 'success');
+    if (setRes.status === 'fulfilled' && setRes.value.success && Array.isArray(setRes.value.data) && setRes.value.data.length > 0) {
+      settings.set(setRes.value.data[0]);
+    }
   } catch (err: any) {
-    addToast('Sinkronisasi Gagal', err.message || 'Gagal mengambil data dari Google Apps Script', 'warning');
+    console.error('[GAS API] Error loading data:', err);
+    addToast('Koneksi Gagal', 'Gagal memuat data dari Google Sheets. Periksa URL AppScript kamu.', 'error');
   } finally {
     isLoading.set(false);
   }
 }
 
+// Auto load data on client startup
+if (typeof window !== 'undefined') {
+  loadDataFromGAS();
+}
+
 export async function pushAllToGAS() {
-  const currentSettings = get(settings);
-  if (!currentSettings.gas_script_url) {
-    addToast('Peringatan', 'Google Apps Script URL belum dikonfigurasi di Pengaturan.', 'warning');
+  if (!PUBLIC_GAS_URL) {
+    addToast('Peringatan', 'Google Apps Script URL belum dikonfigurasi di .env.', 'warning');
     return;
   }
 
@@ -172,7 +137,7 @@ export async function pushAllToGAS() {
 
     // Try bulk sync first
     try {
-      const res = await postToGAS(currentSettings.gas_script_url, 'syncAllData', payload);
+      const res = await postToGAS(PUBLIC_GAS_URL, 'syncAllData', payload);
       if (res && res.success) {
         addToast('Sync Berhasil', 'Seluruh data aplikasi telah berhasil dikirim & disimpan di Google Spreadsheet!', 'success');
         return;
@@ -183,13 +148,13 @@ export async function pushAllToGAS() {
 
     // Fallback: upload item by item
     for (const c of custs) {
-      await postToGAS(currentSettings.gas_script_url, 'addCustomer', c);
+      await postToGAS(PUBLIC_GAS_URL, 'addCustomer', c);
     }
     for (const o of ords) {
-      await postToGAS(currentSettings.gas_script_url, 'addOrder', o);
+      await postToGAS(PUBLIC_GAS_URL, 'addOrder', o);
     }
     for (const s of srvs) {
-      await postToGAS(currentSettings.gas_script_url, 'addService', s);
+      await postToGAS(PUBLIC_GAS_URL, 'addService', s);
     }
 
     addToast('Sync Berhasil', 'Seluruh data berhasil disimpan ke Google Spreadsheet!', 'success');
@@ -209,12 +174,10 @@ export function addCustomer(cust: Omit<Customer, 'id' | 'created_at'>) {
     created_at: new Date().toISOString().slice(0, 10)
   };
   customers.update((all) => [newCust, ...all]);
-  saveToDbApi('addCustomer', newCust);
   addToast('Berhasil', `Pelanggan ${cust.nama} berhasil ditambahkan!`, 'success');
 
-  const currentSettings = get(settings);
-  if (currentSettings.gas_script_url) {
-    postToGAS(currentSettings.gas_script_url, 'addCustomer', newCust).catch(console.error);
+  if (PUBLIC_GAS_URL) {
+    postToGAS(PUBLIC_GAS_URL, 'addCustomer', newCust).catch(console.error);
   }
   return newCust;
 }
@@ -223,23 +186,19 @@ export function updateCustomer(id: string, cust: Partial<Customer>) {
   customers.update((all) =>
     all.map((c) => (c.id === id ? { ...c, ...cust } : c))
   );
-  saveToDbApi('updateCustomer', { id, ...cust });
   addToast('Tersimpan', 'Data customer berhasil diperbarui!', 'success');
 
-  const currentSettings = get(settings);
-  if (currentSettings.gas_script_url) {
-    postToGAS(currentSettings.gas_script_url, 'updateCustomer', { id, ...cust }).catch(console.error);
+  if (PUBLIC_GAS_URL) {
+    postToGAS(PUBLIC_GAS_URL, 'updateCustomer', { id, ...cust }).catch(console.error);
   }
 }
 
 export function deleteCustomer(id: string) {
   customers.update((all) => all.filter((c) => c.id !== id));
-  saveToDbApi('deleteCustomer', { id });
   addToast('Dihapus', 'Pelanggan berhasil dihapus.', 'info');
 
-  const currentSettings = get(settings);
-  if (currentSettings.gas_script_url) {
-    postToGAS(currentSettings.gas_script_url, 'deleteCustomer', { id }).catch(console.error);
+  if (PUBLIC_GAS_URL) {
+    postToGAS(PUBLIC_GAS_URL, 'deleteCustomer', { id }).catch(console.error);
   }
 }
 
@@ -258,12 +217,10 @@ export function createOrder(orderInput: Omit<Order, 'id' | 'invoice' | 'created_
   };
 
   orders.update((all) => [newOrder, ...all]);
-  saveToDbApi('addOrder', newOrder);
   addToast('Order Berhasil', `Nota ${invoice} telah dibuat. Status: ${newOrder.status}`, 'success');
 
-  const currentSettings = get(settings);
-  if (currentSettings.gas_script_url) {
-    postToGAS(currentSettings.gas_script_url, 'addOrder', newOrder).catch(console.error);
+  if (PUBLIC_GAS_URL) {
+    postToGAS(PUBLIC_GAS_URL, 'addOrder', newOrder).catch(console.error);
   }
 
   return newOrder;
@@ -282,34 +239,60 @@ export function updateOrderStatus(orderId: string, newStatus: OrderStatus) {
       return o;
     })
   );
-  saveToDbApi('updateOrderStatus', { id: orderId, status: newStatus, updated_at: now });
 
   addToast('Status Diperbarui', `Nota ${updatedInvoice} diubah menjadi "${newStatus}"`, 'success');
 
-  const currentSettings = get(settings);
-  if (currentSettings.gas_script_url) {
-    postToGAS(currentSettings.gas_script_url, 'updateOrderStatus', { id: orderId, status: newStatus }).catch(console.error);
+  if (PUBLIC_GAS_URL) {
+    postToGAS(PUBLIC_GAS_URL, 'updateOrderStatus', { id: orderId, status: newStatus, updated_at: now }).catch(console.error);
   }
 }
 
 export function deleteOrder(orderId: string) {
   orders.update((all) => all.filter((o) => o.id !== orderId));
-  saveToDbApi('deleteOrder', { id: orderId });
   addToast('Order Dihapus', 'Order cucian telah dihapus dari sistem', 'info');
 
-  const currentSettings = get(settings);
-  if (currentSettings.gas_script_url) {
-    postToGAS(currentSettings.gas_script_url, 'deleteOrder', { id: orderId }).catch(console.error);
+  if (PUBLIC_GAS_URL) {
+    postToGAS(PUBLIC_GAS_URL, 'deleteOrder', { id: orderId }).catch(console.error);
+  }
+}
+
+export function addService(srv: Omit<Service, 'id'>) {
+  const id = `SRV-${String(get(services).length + 1).padStart(3, '0')}`;
+  const newService: Service = { ...srv, id };
+  
+  services.update((all) => [...all, newService]);
+  addToast('Berhasil', `Layanan ${srv.nama_layanan} ditambahkan!`, 'success');
+  
+  if (PUBLIC_GAS_URL) {
+    postToGAS(PUBLIC_GAS_URL, 'addService', newService).catch(console.error);
+  }
+}
+
+export function updateService(id: string, srv: Partial<Service>) {
+  services.update((all) =>
+    all.map((s) => (s.id === id ? { ...s, ...srv } : s))
+  );
+  addToast('Tersimpan', 'Layanan berhasil diperbarui!', 'success');
+  
+  if (PUBLIC_GAS_URL) {
+    postToGAS(PUBLIC_GAS_URL, 'updateService', { id, ...srv }).catch(console.error);
+  }
+}
+
+export function deleteService(id: string) {
+  services.update((all) => all.filter((s) => s.id !== id));
+  addToast('Dihapus', 'Layanan berhasil dihapus.', 'info');
+  
+  if (PUBLIC_GAS_URL) {
+    postToGAS(PUBLIC_GAS_URL, 'deleteService', { id }).catch(console.error);
   }
 }
 
 export function updateSettings(newSettings: Partial<Settings>) {
   settings.update((s) => ({ ...s, ...newSettings }));
-  saveToDbApi('updateSettings', newSettings);
   addToast('Pengaturan Tersimpan', 'Pengaturan aplikasi laundry berhasil diperbarui!', 'success');
 
-  const currentSettings = get(settings);
-  if (currentSettings.gas_script_url) {
-    postToGAS(currentSettings.gas_script_url, 'updateSettings', currentSettings).catch(console.error);
+  if (PUBLIC_GAS_URL) {
+    postToGAS(PUBLIC_GAS_URL, 'updateSettings', newSettings).catch(console.error);
   }
 }

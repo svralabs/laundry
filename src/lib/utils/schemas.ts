@@ -32,6 +32,5 @@ export const settingsSchema = z.object({
   logo: z.string().optional().default(''),
   footer: z.string().optional().default('Terima kasih telah menggunakan layanan kami.'),
   default_harga: z.number().min(0),
-  default_estimasi: z.number().min(1),
-  gas_script_url: z.string().optional().default(''),
+  default_estimasi: z.number().min(1, 'Default estimasi minimal 1 hari'),
 });

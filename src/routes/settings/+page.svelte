@@ -2,6 +2,7 @@
 <script lang="ts">
   import { settings, updateSettings, addToast, pushAllToGAS } from '$stores/laundryStore';
   import { testGASConnection } from '$services/api';
+  import { env } from '$env/dynamic/public';
   import {
     Settings as SettingsIcon,
     Store,
@@ -26,11 +27,12 @@
   let footer = $settings.footer;
   let default_harga = $settings.default_harga;
   let default_estimasi = $settings.default_estimasi;
-  let gas_script_url = $settings.gas_script_url;
 
   let testingConnection = false;
   let pushingData = false;
   let connectionStatus: { success?: boolean; message?: string } | null = null;
+  
+  const publicGasUrl = env.PUBLIC_GAS_URL || '';
 
   async function handleSaveSettings() {
     updateSettings({
@@ -40,26 +42,19 @@
       logo,
       footer,
       default_harga: Number(default_harga),
-      default_estimasi: Number(default_estimasi),
-      gas_script_url
+      default_estimasi: Number(default_estimasi)
     });
-
-    if (gas_script_url) {
-      pushingData = true;
-      await pushAllToGAS();
-      pushingData = false;
-    }
   }
 
   async function handleTestConnection() {
-    if (!gas_script_url) {
-      addToast('Peringatan', 'Masukkan URL Google Apps Script Web App terlebih dahulu.', 'warning');
+    if (!publicGasUrl) {
+      addToast('Peringatan', 'PUBLIC_GAS_URL belum dikonfigurasi di Environment Variables.', 'warning');
       return;
     }
     testingConnection = true;
     connectionStatus = null;
 
-    const res = await testGASConnection(gas_script_url);
+    const res = await testGASConnection(publicGasUrl);
     testingConnection = false;
     connectionStatus = res;
 
@@ -72,6 +67,11 @@
 
   async function handlePushAll() {
     handleSaveSettings();
+    if (publicGasUrl) {
+      pushingData = true;
+      await pushAllToGAS();
+      pushingData = false;
+    }
   }
 </script>
 
@@ -91,14 +91,9 @@
     <button
       type="button"
       on:click={handleSaveSettings}
-      disabled={pushingData}
       class="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-blue-500/20 transition active:scale-95 disabled:opacity-50"
     >
-      {#if pushingData}
-        <RefreshCw class="w-4 h-4 animate-spin" /> Menyimpan & Sinkronisasi...
-      {:else}
-        <Save class="w-4 h-4" /> Simpan Perubahan
-      {/if}
+      <Save class="w-4 h-4" /> Simpan Perubahan
     </button>
   </div>
 
@@ -210,29 +205,32 @@
           <div class="text-xs text-emerald-900 dark:text-emerald-200 space-y-1">
             <p class="font-bold">Otomatisasi Real-Time Aktif</p>
             <p class="text-emerald-700 dark:text-emerald-300 leading-relaxed">
-              Setelah Web App URL disimpan di bawah ini, setiap data transaksi atau pelanggan yang dimasukkan melalui website akan <strong>otomatis langsung tersimpan ke Google Spreadsheet / AppSheet</strong> secara real-time.
+              Konfigurasi AppScript Web URL saat ini menggunakan <strong>Environment Variables (.env)</strong> yang lebih aman untuk Vercel.
+              Semua data akan otomatis disinkronkan langsung ke Google Sheets.
             </p>
           </div>
         </div>
 
-        <!-- GAS Web App URL Input -->
         <div>
           <label class="block text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 mb-1.5">
-            Link Google Apps Script (Web App URL)
+            Status URL Environment Variable
           </label>
-          <input
-            type="url"
-            bind:value={gas_script_url}
-            placeholder="https://script.google.com/macros/s/AKfycbx.../exec"
-            class="w-full px-4 py-2.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 font-mono focus:ring-2 focus:ring-emerald-600 outline-none"
-          />
+          {#if publicGasUrl}
+            <div class="px-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-700 dark:text-slate-300 text-xs font-mono truncate border border-slate-200 dark:border-slate-700">
+              {publicGasUrl}
+            </div>
+          {:else}
+            <div class="px-4 py-3 bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 rounded-xl text-xs border border-amber-200 dark:border-amber-800 font-bold">
+              PUBLIC_GAS_URL belum terdeteksi. Pastikan kamu sudah menyetelnya di pengaturan Environment Vercel.
+            </div>
+          {/if}
         </div>
 
-        <div class="flex flex-wrap items-center gap-3">
+        <div class="flex flex-wrap items-center gap-3 mt-4">
           <button
             type="button"
             on:click={handleTestConnection}
-            disabled={testingConnection}
+            disabled={testingConnection || !publicGasUrl}
             class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow transition disabled:opacity-50"
           >
             <RefreshCw class="w-3.5 h-3.5 {testingConnection ? 'animate-spin' : ''}" />
@@ -242,11 +240,11 @@
           <button
             type="button"
             on:click={handlePushAll}
-            disabled={pushingData}
+            disabled={pushingData || !publicGasUrl}
             class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition disabled:opacity-50"
           >
             <UploadCloud class="w-3.5 h-3.5 {pushingData ? 'animate-bounce' : ''}" />
-            Kirim & Sinkronkan Semua Data
+            Sinkronkan Ulang Semua Data
           </button>
         </div>
 

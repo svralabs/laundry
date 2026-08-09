@@ -45,7 +45,6 @@ export interface Settings {
   footer: string;
   default_harga: number;
   default_estimasi: number;
-  gas_script_url: string;
 }
 
 export interface APIResponse<T = any> {

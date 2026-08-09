@@ -3,9 +3,10 @@
     settings,
     globalSearch,
     isLoading,
-    syncFromGAS,
+    loadDataFromGAS,
   } from "$stores/laundryStore";
   import { formatDate } from "$utils/formatters";
+  import { env } from '$env/dynamic/public';
   import {
     Menu,
     Search,
@@ -23,6 +24,8 @@
 
   let isDarkMode = false;
   let todayFormatted = formatDate(new Date(), " DD MMMM YYYY");
+  
+  const publicGasUrl = env.PUBLIC_GAS_URL || '';
 
   onMount(() => {
     isDarkMode = document.documentElement.classList.contains("dark");
@@ -58,7 +61,7 @@
         class="text-base font-extrabold text-slate-800 dark:text-white tracking-tight flex items-center gap-2"
       >
         {$settings.nama_laundry || "SVRA Laundry"}
-        {#if $settings.gas_script_url}
+        {#if publicGasUrl}
           <span
             class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
           >
@@ -93,10 +96,10 @@
   <!-- Actions & User Profile -->
   <div class="flex items-center gap-2 sm:gap-3">
     <!-- GAS Sync Button -->
-    {#if $settings.gas_script_url}
+    {#if publicGasUrl}
       <button
         type="button"
-        on:click={syncFromGAS}
+        on:click={loadDataFromGAS}
         disabled={$isLoading}
         class="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition relative"
         title="Sync Spreadsheet"
