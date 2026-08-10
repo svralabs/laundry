@@ -272,16 +272,14 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter) {
     var statusColIdx = headers.indexOf('status');
     var tanggalColIdx = headers.indexOf('tanggal');
 
-    var scanRows = Math.min(lastRow - 1, 20000);
-    var startRow = lastRow - scanRows + 1;
+    var totalRows = lastRow - 1;
+    var startRow = 2;
 
-    var statusVals = (statusColIdx !== -1) ? sheet.getRange(startRow, statusColIdx + 1, scanRows, 1).getValues() : null;
-    var tanggalVals = (tanggalColIdx !== -1) ? sheet.getRange(startRow, tanggalColIdx + 1, scanRows, 1).getValues() : null;
+    var statusVals = (statusColIdx !== -1) ? sheet.getRange(startRow, statusColIdx + 1, totalRows, 1).getValues() : null;
+    var tanggalVals = (tanggalColIdx !== -1) ? sheet.getRange(startRow, tanggalColIdx + 1, totalRows, 1).getValues() : null;
 
     for (var i = 0; i < matchingRowIndices.length; i++) {
       var rowNum = matchingRowIndices[i];
-      if (rowNum < startRow) continue;
-
       var arrayIdx = rowNum - startRow;
 
       var stVal = statusVals ? statusVals[arrayIdx][0] : '';
@@ -490,8 +488,12 @@ function getStatusSummaryData() {
 
     if (lastRow <= 1) return summary;
 
-    var scanCount = Math.min(5000, lastRow - 1);
-    var statusCol = sheet.getRange(lastRow - scanCount + 1, 14, scanCount, 1).getValues();
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var statusColIdx = headers.indexOf('status');
+    if (statusColIdx === -1) statusColIdx = 13;
+
+    var totalRows = lastRow - 1;
+    var statusCol = sheet.getRange(2, statusColIdx + 1, totalRows, 1).getValues();
 
     for (var i = 0; i < statusCol.length; i++) {
       var st = statusCol[i][0];
