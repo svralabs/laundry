@@ -100,17 +100,27 @@ export async function loadDataFromGAS(page = 1, pageSize = 50, append = false, q
   }
 
   try {
-    const [custRes, srvRes, ordRes, setRes] = await Promise.allSettled([
-      fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page: 1, pageSize: 200, q: query }), // usually less customers, load 200
-      fetchFromGAS<Service[]>(PUBLIC_GAS_URL, 'getServices'),
-      fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, q: query }),
-      fetchFromGAS<Settings[]>(PUBLIC_GAS_URL, 'getSettings')
-    ]);
+    const needServices = get(services).length === 0;
+    const needSettings = !get(capacityStatus);
+
+    const promises: Promise<any>[] = [
+      fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page: 1, pageSize: 200, q: query }),
+      fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, q: query })
+    ];
+
+    if (needServices) promises.push(fetchFromGAS<Service[]>(PUBLIC_GAS_URL, 'getServices'));
+    if (needSettings) promises.push(fetchFromGAS<Settings[]>(PUBLIC_GAS_URL, 'getSettings'));
+
+    const results = await Promise.allSettled(promises);
+    const custRes = results[0];
+    const ordRes = results[1];
+    let srvRes = needServices ? results[2] : null;
+    let setRes = needSettings ? (needServices ? results[3] : results[2]) : null;
 
     if (custRes.status === 'fulfilled' && custRes.value.success && Array.isArray(custRes.value.data)) {
       customers.set(custRes.value.data);
     }
-    if (srvRes.status === 'fulfilled' && srvRes.value.success && Array.isArray(srvRes.value.data)) {
+    if (srvRes && srvRes.status === 'fulfilled' && srvRes.value.success && Array.isArray(srvRes.value.data)) {
       services.set(srvRes.value.data);
     }
     if (ordRes.status === 'fulfilled' && ordRes.value.success && Array.isArray(ordRes.value.data)) {
@@ -132,7 +142,7 @@ export async function loadDataFromGAS(page = 1, pageSize = 50, append = false, q
         });
       }
     }
-    if (setRes.status === 'fulfilled' && setRes.value.success) {
+    if (setRes && setRes.status === 'fulfilled' && setRes.value.success) {
       if (Array.isArray(setRes.value.data) && setRes.value.data.length > 0) {
         settings.set(setRes.value.data[0]);
       }

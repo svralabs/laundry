@@ -45,7 +45,7 @@ function handleApiAction(action, payload) {
   }
   if (action === 'getSettings') {
     var data = getCachedData('settings', function() { return getSheetData('settings'); }, 21600);
-    var capacity = calculateCapacity();
+    var capacity = getCachedData('capacity_metrics', function() { return calculateCapacity(); }, 600);
     checkAndSendCapacityAlert(capacity);
     return { success: true, data: data, meta: { capacity: capacity } };
   }
