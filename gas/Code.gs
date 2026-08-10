@@ -49,7 +49,8 @@ function handleApiAction(action, payload) {
     var q              = (payload && payload.q)              ? payload.q              : undefined;
     var categoryFilter = (payload && payload.categoryFilter) ? payload.categoryFilter : undefined;
     var yearFilter     = (payload && payload.yearFilter)     ? payload.yearFilter     : undefined;
-    return getPagedExpenses(page, pageSize, q, categoryFilter, yearFilter);
+    var timeframe      = (payload && payload.timeframe)      ? payload.timeframe      : undefined;
+    return getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timeframe);
   }
 
   // ── READ — dashboard & summary ──────────────
@@ -432,6 +433,45 @@ function getPagedCustomers(page, pageSize, q) {
       to: to
     }
   };
+}
+
+function isDateInTimeframe(dStr, timeframe, todayStr) {
+  if (!timeframe || timeframe === 'all') return true;
+  if (!dStr) return false;
+  var d = dStr.slice(0, 10);
+  if (!todayStr) todayStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
+
+  if (timeframe === 'today') {
+    return d === todayStr;
+  }
+
+  var tParts = todayStr.split('-');
+  var tYear = parseInt(tParts[0], 10);
+  var tMonth = parseInt(tParts[1], 10);
+  var tDay = parseInt(tParts[2], 10);
+  var todayDateObj = new Date(tYear, tMonth - 1, tDay);
+
+  var dParts = d.split('-');
+  var dYear = parseInt(dParts[0], 10);
+  var dMonth = parseInt(dParts[1], 10);
+  var dDay = parseInt(dParts[2], 10);
+  var targetDateObj = new Date(dYear, dMonth - 1, dDay);
+
+  if (timeframe === 'week') {
+    var diffMs = todayDateObj.getTime() - targetDateObj.getTime();
+    var diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    return diffDays >= 0 && diffDays < 7;
+  }
+
+  if (timeframe === 'month') {
+    return dYear === tYear && dMonth === tMonth;
+  }
+
+  if (timeframe === 'year') {
+    return dYear === tYear;
+  }
+
+  return true;
 }
 
 function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timeframe) {
