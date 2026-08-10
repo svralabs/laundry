@@ -1,6 +1,7 @@
 <!-- ==================== HALAMAN RIWAYAT & LAPORAN LAUNDRY ==================== -->
 <script lang="ts">
-  import { orders, deleteOrder, globalSearch, paginationState, loadDataFromGAS } from '$stores/laundryStore';
+  import { orders, deleteOrder, globalSearch, paginationState, loadDataFromGAS, isLoading } from '$stores/laundryStore';
+  import TableRowSkeleton from '$lib/components/skeletons/TableRowSkeleton.svelte';
   import type { Order } from '$types/laundry';
   import StatusBadge from '$components/StatusBadge.svelte';
   import ConfirmModal from '$components/ConfirmModal.svelte';
@@ -188,7 +189,10 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-xs sm:text-sm">
-          {#each paginatedOrders as ord}
+          {#if $isLoading}
+            <TableRowSkeleton cols={8} rows={6} />
+          {:else}
+            {#each paginatedOrders as ord}
             <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group">
               <td class="py-4 px-6 font-mono font-bold text-blue-600 dark:text-blue-400">
                 {ord.invoice}
@@ -240,6 +244,7 @@
               </td>
             </tr>
           {/each}
+          {/if}
         </tbody>
       </table>
     </div>

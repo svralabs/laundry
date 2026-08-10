@@ -1,6 +1,7 @@
 <!-- ==================== HALAMAN KELOLA PELANGGAN ==================== -->
 <script lang="ts">
-  import { customers, deleteCustomer, globalSearch, paginationState, loadDataFromGAS } from '$stores/laundryStore';
+  import { customers, deleteCustomer, globalSearch, paginationState, loadDataFromGAS, isLoading } from '$stores/laundryStore';
+  import TableRowSkeleton from '$lib/components/skeletons/TableRowSkeleton.svelte';
   import type { Customer } from '$types/laundry';
   import CustomerModal from '$components/CustomerModal.svelte';
   import ConfirmModal from '$components/ConfirmModal.svelte';
@@ -170,7 +171,10 @@
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-xs sm:text-sm">
-          {#each paginatedCustomers as cust}
+          {#if $isLoading}
+            <TableRowSkeleton cols={6} rows={5} />
+          {:else}
+            {#each paginatedCustomers as cust}
             <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group">
               <td class="py-4 px-6 font-mono font-bold text-blue-600 dark:text-blue-400">
                 {cust.id}
@@ -221,6 +225,7 @@
               </td>
             </tr>
           {/each}
+          {/if}
         </tbody>
       </table>
     </div>

@@ -1,9 +1,12 @@
 <!-- ==================== HALAMAN UTAMA / DASHBOARD ==================== -->
 <script lang="ts">
-  import { stats, orders, customers, globalSearch } from "$stores/laundryStore";
+  import { stats, orders, customers, globalSearch, isLoading } from "$stores/laundryStore";
   import StatCard from "$components/StatCard.svelte";
   import StatusBadge from "$components/StatusBadge.svelte";
   import StepProgress from "$components/StepProgress.svelte";
+  import StatCardSkeleton from "$lib/components/skeletons/StatCardSkeleton.svelte";
+  import TableRowSkeleton from "$lib/components/skeletons/TableRowSkeleton.svelte";
+  import ProgressSkeleton from "$lib/components/skeletons/ProgressSkeleton.svelte";
   import { formatRupiah, formatDateShort } from "$utils/formatters";
   import {
     Users,
@@ -85,52 +88,58 @@
   <div
     class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-4"
   >
-    <StatCard
-      title="Total Pelanggan"
-      value={$stats.totalCustomers}
-      subtitle="Orang terdaftar"
-      icon={Users}
-      iconColor="text-blue-600 bg-blue-50 dark:bg-blue-950/60"
-      trend="+12%"
-      trendUp={true}
-    />
-    <StatCard
-      title="Pesanan Hari Ini"
-      value={$stats.todayOrders}
-      subtitle="Nota masuk"
-      icon={ShoppingBag}
-      iconColor="text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60"
-      trend="+5 nota"
-      trendUp={true}
-    />
-    <StatCard
-      title="Sedang Dicuci"
-      value={$stats.sedangDicuci}
-      subtitle="Dalam proses"
-      icon={Loader2}
-      iconColor="text-amber-600 bg-amber-50 dark:bg-amber-950/60"
-    />
-    <StatCard
-      title="Siap Diambil"
-      value={$stats.siapDiambil}
-      subtitle="Sudah selesai"
-      icon={CheckCircle2}
-      iconColor="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60"
-    />
-    <StatCard
-      title="Omset Hari Ini"
-      value={formatRupiah($stats.pendapatanHariIni)}
-      subtitle="Total hari ini"
-      trend="+8%"
-      trendUp={true}
-    />
-    <StatCard
-      title="Omset Bulan Ini"
-      value={formatRupiah($stats.pendapatanBulanIni)}
-      subtitle="Total bulan ini"
-      trend="+18%"
-      trendUp={true}
-    />
+    {#if $isLoading}
+      {#each Array(6) as _}
+        <StatCardSkeleton />
+      {/each}
+    {:else}
+      <StatCard
+        title="Total Pelanggan"
+        value={$stats.totalCustomers}
+        subtitle="Orang terdaftar"
+        icon={Users}
+        iconColor="text-blue-600 bg-blue-50 dark:bg-blue-950/60"
+        trend="+12%"
+        trendUp={true}
+      />
+      <StatCard
+        title="Pesanan Hari Ini"
+        value={$stats.todayOrders}
+        subtitle="Nota masuk"
+        icon={ShoppingBag}
+        iconColor="text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60"
+        trend="+5 nota"
+        trendUp={true}
+      />
+      <StatCard
+        title="Sedang Dicuci"
+        value={$stats.sedangDicuci}
+        subtitle="Dalam proses"
+        icon={Loader2}
+        iconColor="text-amber-600 bg-amber-50 dark:bg-amber-950/60"
+      />
+      <StatCard
+        title="Siap Diambil"
+        value={$stats.siapDiambil}
+        subtitle="Sudah selesai"
+        icon={CheckCircle2}
+        iconColor="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60"
+      />
+      <StatCard
+        title="Omset Hari Ini"
+        value={formatRupiah($stats.pendapatanHariIni)}
+        subtitle="Total hari ini"
+        trend="+8%"
+        trendUp={true}
+      />
+      <StatCard
+        title="Omset Bulan Ini"
+        value={formatRupiah($stats.pendapatanBulanIni)}
+        subtitle="Total bulan ini"
+        trend="+18%"
+        trendUp={true}
+      />
+    {/if}
   </div>
 
   <!-- Charts Section -->
@@ -266,35 +275,39 @@
           <tbody
             class="divide-y divide-slate-100 dark:divide-slate-800 text-xs"
           >
-            {#each recentOrders as ord}
-              <tr
-                class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
-              >
-                <td class="py-3 px-3 font-bold text-blue-600 dark:text-blue-400"
-                  >{ord.invoice}</td
-                >
-                <td
-                  class="py-3 px-3 font-semibold text-slate-800 dark:text-slate-200"
-                  >{ord.customer_nama || "Umum"}</td
-                >
-                <td class="py-3 px-3 text-slate-600 dark:text-slate-400"
-                  >{ord.service_nama || "Cuci Komplit"} ({ord.berat} kg)</td
-                >
-                <td
-                  class="py-3 px-3 font-bold text-slate-800 dark:text-slate-100"
-                  >{formatRupiah(ord.total)}</td
-                >
-                <td class="py-3 px-3">
-                  <StatusBadge status={ord.status} size="sm" />
-                </td>
-              </tr>
+            {#if $isLoading}
+              <TableRowSkeleton cols={5} rows={5} />
             {:else}
-              <tr>
-                <td colspan="5" class="py-6 text-center text-slate-400"
-                  >Belum ada data pesanan.</td
+              {#each recentOrders as ord}
+                <tr
+                  class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
                 >
-              </tr>
-            {/each}
+                  <td class="py-3 px-3 font-bold text-blue-600 dark:text-blue-400"
+                    >{ord.invoice}</td
+                  >
+                  <td
+                    class="py-3 px-3 font-semibold text-slate-800 dark:text-slate-200"
+                    >{ord.customer_nama || "Umum"}</td
+                  >
+                  <td class="py-3 px-3 text-slate-600 dark:text-slate-400"
+                    >{ord.service_nama || "Cuci Komplit"} ({ord.berat} kg)</td
+                  >
+                  <td
+                    class="py-3 px-3 font-bold text-slate-800 dark:text-slate-100"
+                    >{formatRupiah(ord.total)}</td
+                  >
+                  <td class="py-3 px-3">
+                    <StatusBadge status={ord.status} size="sm" />
+                  </td>
+                </tr>
+              {:else}
+                <tr>
+                  <td colspan="5" class="py-6 text-center text-slate-400"
+                    >Belum ada data pesanan.</td
+                  >
+                </tr>
+              {/each}
+            {/if}
           </tbody>
         </table>
       </div>
@@ -320,29 +333,33 @@
       </div>
 
       <div class="space-y-4">
-        {#each activeLaundryProgress as ord}
-          <div
-            class="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 space-y-2"
-          >
-            <div class="flex items-center justify-between text-xs font-bold">
-              <span class="text-slate-800 dark:text-white"
-                >{ord.customer_nama}</span
-              >
-              <span class="text-blue-600 dark:text-blue-400 font-mono"
-                >{ord.invoice}</span
-              >
-            </div>
-            <StepProgress
-              orderId={ord.id}
-              currentStatus={ord.status}
-              compact={true}
-            />
-          </div>
+        {#if $isLoading}
+          <ProgressSkeleton count={4} />
         {:else}
-          <div class="py-8 text-center text-slate-400 text-xs">
-            Tidak ada cucian yang sedang diproses saat ini.
-          </div>
-        {/each}
+          {#each activeLaundryProgress as ord}
+            <div
+              class="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 space-y-2"
+            >
+              <div class="flex items-center justify-between text-xs font-bold">
+                <span class="text-slate-800 dark:text-white"
+                  >{ord.customer_nama}</span
+                >
+                <span class="text-blue-600 dark:text-blue-400 font-mono"
+                  >{ord.invoice}</span
+                >
+              </div>
+              <StepProgress
+                orderId={ord.id}
+                currentStatus={ord.status}
+                compact={true}
+              />
+            </div>
+          {:else}
+            <div class="py-8 text-center text-slate-400 text-xs">
+              Tidak ada cucian yang sedang diproses saat ini.
+            </div>
+          {/each}
+        {/if}
       </div>
     </div>
   </div>

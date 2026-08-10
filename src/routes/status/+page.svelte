@@ -1,6 +1,7 @@
 <!-- ==================== HALAMAN MONITOR STATUS & DAFTAR TRANSAKSI ==================== -->
 <script lang="ts">
-  import { orders, globalSearch, paginationState, loadDataFromGAS } from '$stores/laundryStore';
+  import { orders, globalSearch, paginationState, loadDataFromGAS, isLoading } from '$stores/laundryStore';
+  import CardGridSkeleton from '$lib/components/skeletons/CardGridSkeleton.svelte';
   import type { OrderStatus } from '$types/laundry';
   import StatusBadge from '$components/StatusBadge.svelte';
   import StepProgress from '$components/StepProgress.svelte';
@@ -90,73 +91,77 @@
 
   <!-- Cards List View -->
   <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-    {#each filteredOrders as ord (ord.id)}
-      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card hover:shadow-soft transition-all duration-300 space-y-5">
-        <!-- Top Info -->
-        <div class="flex items-start justify-between">
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="font-mono font-extrabold text-sm text-blue-600 dark:text-blue-400">{ord.invoice}</span>
-              <StatusBadge status={ord.status} size="sm" />
-            </div>
-            <h3 class="text-base font-extrabold text-slate-800 dark:text-white mt-1">
-              {ord.customer_nama || 'Pelanggan Umum'}
-            </h3>
-            <p class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
-              <span><Phone class="w-3 h-3 inline text-emerald-500" /> {ord.customer_hp || '-'}</span>
-              <span>•</span>
-              <span><Calendar class="w-3 h-3 inline text-blue-500" /> Masuk: {formatDateShort(ord.tanggal)}</span>
-            </p>
-          </div>
-
-          <div class="text-right">
-            <span class="text-xs font-semibold text-slate-400 uppercase">Total Bayar</span>
-            <p class="text-base font-black text-slate-800 dark:text-white">{formatRupiah(ord.total)}</p>
-          </div>
-        </div>
-
-        <!-- Service & Weight -->
-        <div class="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-xs">
-          <div class="flex items-center gap-2">
-            <Shirt class="w-4 h-4 text-blue-600" />
-            <span class="font-bold text-slate-700 dark:text-slate-200">{ord.service_nama || 'Cuci Komplit'}</span>
-          </div>
-          <span class="font-extrabold text-slate-800 dark:text-slate-100">{ord.berat} Kg</span>
-        </div>
-
-        {#if ord.catatan}
-          <p class="text-xs text-slate-500 dark:text-slate-400 italic bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 p-2.5 rounded-xl">
-            Catatan: "{ord.catatan}"
-          </p>
-        {/if}
-
-        <!-- Interactive Step Progress Bar -->
-        <div class="pt-2">
-          <StepProgress orderId={ord.id} currentStatus={ord.status} />
-        </div>
-
-        <!-- Actions -->
-        <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <button
-            type="button"
-            on:click={() => generateOrderPDF(ord)}
-            class="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-blue-600 flex items-center gap-1.5 transition"
-          >
-            <Printer class="w-4 h-4 text-blue-500" /> Cetak Nota PDF
-          </button>
-
-          <span class="text-[11px] text-slate-400 font-medium">
-            Est Selesai: <strong>{formatDateShort(ord.estimasi)}</strong>
-          </span>
-        </div>
-      </div>
+    {#if $isLoading}
+      <CardGridSkeleton count={4} />
     {:else}
-      <div class="col-span-full bg-white dark:bg-slate-900 rounded-3xl p-12 text-center border border-slate-200 dark:border-slate-800 space-y-3">
-        <CheckCircle2 class="w-12 h-12 text-slate-300 mx-auto" />
-        <h3 class="text-base font-bold text-slate-700 dark:text-slate-300">Tidak ada data cucian</h3>
-        <p class="text-xs text-slate-400">Tidak ada cucian yang cocok dengan filter status atau pencarian ini.</p>
-      </div>
-    {/each}
+      {#each filteredOrders as ord (ord.id)}
+        <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card hover:shadow-soft transition-all duration-300 space-y-5">
+          <!-- Top Info -->
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-mono font-extrabold text-sm text-blue-600 dark:text-blue-400">{ord.invoice}</span>
+                <StatusBadge status={ord.status} size="sm" />
+              </div>
+              <h3 class="text-base font-extrabold text-slate-800 dark:text-white mt-1">
+                {ord.customer_nama || 'Pelanggan Umum'}
+              </h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
+                <span><Phone class="w-3 h-3 inline text-emerald-500" /> {ord.customer_hp || '-'}</span>
+                <span>•</span>
+                <span><Calendar class="w-3 h-3 inline text-blue-500" /> Masuk: {formatDateShort(ord.tanggal)}</span>
+              </p>
+            </div>
+
+            <div class="text-right">
+              <span class="text-xs font-semibold text-slate-400 uppercase">Total Bayar</span>
+              <p class="text-base font-black text-slate-800 dark:text-white">{formatRupiah(ord.total)}</p>
+            </div>
+          </div>
+
+          <!-- Service & Weight -->
+          <div class="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <Shirt class="w-4 h-4 text-blue-600" />
+              <span class="font-bold text-slate-700 dark:text-slate-200">{ord.service_nama || 'Cuci Komplit'}</span>
+            </div>
+            <span class="font-extrabold text-slate-800 dark:text-slate-100">{ord.berat} Kg</span>
+          </div>
+
+          {#if ord.catatan}
+            <p class="text-xs text-slate-500 dark:text-slate-400 italic bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 p-2.5 rounded-xl">
+              Catatan: "{ord.catatan}"
+            </p>
+          {/if}
+
+          <!-- Interactive Step Progress Bar -->
+          <div class="pt-2">
+            <StepProgress orderId={ord.id} currentStatus={ord.status} />
+          </div>
+
+          <!-- Actions -->
+          <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <button
+              type="button"
+              on:click={() => generateOrderPDF(ord)}
+              class="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-blue-600 flex items-center gap-1.5 transition"
+            >
+              <Printer class="w-4 h-4 text-blue-500" /> Cetak Nota PDF
+            </button>
+
+            <span class="text-[11px] text-slate-400 font-medium">
+              Est Selesai: <strong>{formatDateShort(ord.estimasi)}</strong>
+            </span>
+          </div>
+        </div>
+      {:else}
+        <div class="col-span-full bg-white dark:bg-slate-900 rounded-3xl p-12 text-center border border-slate-200 dark:border-slate-800 space-y-3">
+          <CheckCircle2 class="w-12 h-12 text-slate-300 mx-auto" />
+          <h3 class="text-base font-bold text-slate-700 dark:text-slate-300">Tidak ada data cucian</h3>
+          <p class="text-xs text-slate-400">Tidak ada cucian yang cocok dengan filter status atau pencarian ini.</p>
+        </div>
+      {/each}
+    {/if}
   </div>
 
   <!-- Backend Pagination (Load More) -->
