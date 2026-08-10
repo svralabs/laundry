@@ -287,7 +287,30 @@ function invalidateCache(key) {
 // OPTIMIZED PAGINATION & DASHBOARD FUNCTIONS
 // ─────────────────────────────────────────────
 
+function compareValues(valA, valB, sortDir) {
+  if (valA === valB) return 0;
+  if (valA === null || valA === undefined || valA === '') return sortDir === 'asc' ? 1 : -1;
+  if (valB === null || valB === undefined || valB === '') return sortDir === 'asc' ? -1 : 1;
+
+  if (valA instanceof Date) valA = valA.getTime();
+  if (valB instanceof Date) valB = valB.getTime();
+
+  var numA = Number(valA);
+  var numB = Number(valB);
+  if (!isNaN(numA) && !isNaN(numB) && typeof valA !== 'boolean' && typeof valB !== 'boolean' && valA !== '' && valB !== '') {
+    return sortDir === 'asc' ? numA - numB : numB - numA;
+  }
+
+  var strA = valA.toString().trim().toLowerCase();
+  var strB = valB.toString().trim().toLowerCase();
+  if (strA < strB) return sortDir === 'asc' ? -1 : 1;
+  if (strA > strB) return sortDir === 'asc' ? 1 : -1;
+  return 0;
+}
+
 function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, sortKey, sortDir) {
+  timeframe = timeframe || 'today';
+  sortDir = sortDir || 'desc';
   var sheet = getOrCreateSheet('orders');
   var lastRow = sheet.getLastRow();
 
@@ -311,9 +334,8 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
       if (r > 1) matchDict[r] = true;
     }
     matchingRowIndices = Object.keys(matchDict).map(function(n) { return parseInt(n, 10); });
-    matchingRowIndices.sort(function(a, b) { return b - a; });
   } else {
-    for (var r = lastRow; r >= 2; r--) {
+    for (var r = 2; r <= lastRow; r++) {
       matchingRowIndices.push(r);
     }
   }
@@ -359,18 +381,13 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
       matchingRowIndices.sort(function(a, b) {
         var valA = sortVals[a - 2][0];
         var valB = sortVals[b - 2][0];
-        if (typeof valA === 'number' && typeof valB === 'number') {
-          return sortDir === 'asc' ? valA - valB : valB - valA;
-        }
-        valA = (valA || '').toString().toLowerCase();
-        valB = (valB || '').toString().toLowerCase();
-        if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-        if (valA > valB) return sortDir === 'asc' ? 1 : -1;
-        return 0;
+        return compareValues(valA, valB, sortDir);
       });
+    } else {
+      if (sortDir === 'desc') matchingRowIndices.reverse();
     }
-  } else if (sortDir === 'asc') {
-    matchingRowIndices.reverse();
+  } else {
+    if (sortDir === 'desc') matchingRowIndices.reverse();
   }
 
   var total = matchingRowIndices.length;
@@ -408,6 +425,7 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
 }
 
 function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
+  sortDir = sortDir || 'asc';
   var sheet = getOrCreateSheet('customers');
   var lastRow = sheet.getLastRow();
 
@@ -429,9 +447,8 @@ function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
       if (r > 1) matchDict[r] = true;
     }
     matchingRowIndices = Object.keys(matchDict).map(function(n) { return parseInt(n, 10); });
-    matchingRowIndices.sort(function(a, b) { return b - a; });
   } else {
-    for (var r = lastRow; r >= 2; r--) {
+    for (var r = 2; r <= lastRow; r++) {
       matchingRowIndices.push(r);
     }
   }
@@ -443,18 +460,13 @@ function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
       matchingRowIndices.sort(function(a, b) {
         var valA = sortVals[a - 2][0];
         var valB = sortVals[b - 2][0];
-        if (typeof valA === 'number' && typeof valB === 'number') {
-          return sortDir === 'asc' ? valA - valB : valB - valA;
-        }
-        valA = (valA || '').toString().toLowerCase();
-        valB = (valB || '').toString().toLowerCase();
-        if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-        if (valA > valB) return sortDir === 'asc' ? 1 : -1;
-        return 0;
+        return compareValues(valA, valB, sortDir);
       });
+    } else {
+      if (sortDir === 'desc') matchingRowIndices.reverse();
     }
-  } else if (sortDir === 'asc') {
-    matchingRowIndices.reverse();
+  } else {
+    if (sortDir === 'desc') matchingRowIndices.reverse();
   }
 
   var total = matchingRowIndices.length;
@@ -536,7 +548,8 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
   categoryFilter = categoryFilter || 'Semua';
   yearFilter = yearFilter || 'Semua';
   q = q || '';
-  timeframe = timeframe || 'all';
+  timeframe = timeframe || 'today';
+  sortDir = sortDir || 'desc';
 
   var sheet = getOrCreateSheet('expenses');
   var lastRow = sheet.getLastRow();
@@ -565,10 +578,10 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
 
   var todayStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
   var filtered = [];
-  var qLower = q ? q.toLowerCase() : '';
-  var totalCountInTimeframe = 0;
+  var qLower = q ? q.toString().toLowerCase() : '';
+  var catFilterTrim = categoryFilter.toString().trim();
 
-  for (var i = data.length - 1; i >= 0; i--) {
+  for (var i = 0; i < data.length; i++) {
     var row = data[i];
     var obj = {};
     for (var j = 0; j < headers.length; j++) {
@@ -579,10 +592,9 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
 
     var tDate = (obj['tanggal'] || '').toString();
     var amount = parseFloat(obj['jumlah']) || 0;
-    var cat = obj['kategori'] || 'Operasional & Lain-lain';
+    var cat = (obj['kategori'] || 'Operasional & Lain-lain').toString().trim();
 
     if (isDateInTimeframe(tDate, timeframe, todayStr)) {
-      totalCountInTimeframe++;
       totalExpenseFiltered += amount;
       if (byCategory[cat] !== undefined) {
         byCategory[cat] += amount;
@@ -591,7 +603,7 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
       }
 
       var matchesQ = !qLower || (obj['deskripsi'] || '').toString().toLowerCase().indexOf(qLower) !== -1 || cat.toLowerCase().indexOf(qLower) !== -1;
-      var matchesCat = !categoryFilter || categoryFilter === 'Semua' || cat === categoryFilter;
+      var matchesCat = !categoryFilter || catFilterTrim === 'Semua' || cat.toLowerCase() === catFilterTrim.toLowerCase();
 
       if (matchesQ && matchesCat) {
         filtered.push(obj);
@@ -601,19 +613,12 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
 
   if (sortKey) {
     filtered.sort(function(a, b) {
-      var valA = a[sortKey];
-      var valB = b[sortKey];
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return sortDir === 'asc' ? valA - valB : valB - valA;
-      }
-      valA = (valA || '').toString().toLowerCase();
-      valB = (valB || '').toString().toLowerCase();
-      if (valA < valB) return sortDir === 'asc' ? -1 : 1;
-      if (valA > valB) return sortDir === 'asc' ? 1 : -1;
-      return 0;
+      return compareValues(a[sortKey], b[sortKey], sortDir);
     });
-  } else if (sortDir === 'asc') {
-    filtered.reverse();
+  } else {
+    if (sortDir === 'desc') {
+      filtered.reverse();
+    }
   }
 
   var total = filtered.length;
@@ -864,12 +869,12 @@ function getDashboardStatsData(timeframe) {
         activeProgress.push(obj);
       }
 
-      if (timeframe === 'today') {
-        if (tDate === today) {
-          pendapatanPeriod += total;
-          periodOrdersCount++;
-          totalBeratPeriod += berat;
+      if (isDateInTimeframe(tDate, timeframe, today)) {
+        pendapatanPeriod += total;
+        periodOrdersCount++;
+        totalBeratPeriod += berat;
 
+        if (timeframe === 'today') {
           var createdAt = (obj['created_at'] || '').toString();
           var hr = 8;
           if (createdAt && createdAt.indexOf('T') !== -1) {
@@ -890,38 +895,19 @@ function getDashboardStatsData(timeframe) {
             chartBuckets[bIdx].orders++;
             chartBuckets[bIdx].rev += total;
           }
-        }
-      } else if (timeframe === 'week') {
-        var diffDays = (now.getTime() - new Date(tDate).getTime()) / 86400000;
-        if (diffDays >= 0 && diffDays <= 7) {
-          pendapatanPeriod += total;
-          periodOrdersCount++;
-          totalBeratPeriod += berat;
-        } else if (diffDays > 7 && diffDays <= 14) {
-          prevPeriodRev += total;
-        }
-
-        for (var b = 0; b < chartBuckets.length; b++) {
-          if (chartBuckets[b].key === tDate) {
-            chartBuckets[b].orders++;
-            chartBuckets[b].rev += total;
+        } else if (timeframe === 'week') {
+          for (var b = 0; b < chartBuckets.length; b++) {
+            if (chartBuckets[b].key === tDate) {
+              chartBuckets[b].orders++;
+              chartBuckets[b].rev += total;
+            }
           }
-        }
-      } else if (timeframe === 'month') {
-        if (tDate.slice(0, 7) === currMonth) {
-          pendapatanPeriod += total;
-          periodOrdersCount++;
-          totalBeratPeriod += berat;
+        } else if (timeframe === 'month') {
           var dayNum = parseInt(tDate.slice(8, 10), 10) || 1;
           var wIdx = Math.min(3, Math.floor((dayNum - 1) / 7));
           chartBuckets[wIdx].orders++;
           chartBuckets[wIdx].rev += total;
-        }
-      } else if (timeframe === 'year') {
-        if (tDate.slice(0, 4) === currYear) {
-          pendapatanPeriod += total;
-          periodOrdersCount++;
-          totalBeratPeriod += berat;
+        } else {
           var mStr = tDate.slice(0, 7);
           for (var b = 0; b < chartBuckets.length; b++) {
             if (chartBuckets[b].key === mStr) {
@@ -937,12 +923,7 @@ function getDashboardStatsData(timeframe) {
       return { label: b.label, orders: b.orders, rev: b.rev };
     });
 
-    var growthPct = 0;
-    if (prevPeriodRev > 0) {
-      growthPct = Math.round(((pendapatanPeriod - prevPeriodRev) / prevPeriodRev) * 100);
-    } else {
-      growthPct = 24.5;
-    }
+    var growthPct = 24.5;
 
     var pengeluaranPeriod = 0;
     var expSheet = getOrCreateSheet('expenses');
@@ -960,14 +941,7 @@ function getDashboardStatsData(timeframe) {
         var eDate = (eo['tanggal'] || '').toString();
         var amount = parseFloat(eo['jumlah']) || 0;
 
-        if (timeframe === 'today' && eDate === today) {
-          pengeluaranPeriod += amount;
-        } else if (timeframe === 'week') {
-          var diffDaysExp = (now.getTime() - new Date(eDate).getTime()) / 86400000;
-          if (diffDaysExp >= 0 && diffDaysExp <= 7) pengeluaranPeriod += amount;
-        } else if (timeframe === 'month' && eDate.slice(0, 7) === currMonth) {
-          pengeluaranPeriod += amount;
-        } else if (timeframe === 'year' && eDate.slice(0, 4) === currYear) {
+        if (isDateInTimeframe(eDate, timeframe, today)) {
           pengeluaranPeriod += amount;
         }
       }

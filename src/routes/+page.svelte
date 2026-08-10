@@ -23,7 +23,7 @@
     FileText,
   } from "lucide-svelte";
 
-  $: activeTimeframe = ($timeframeFilter === 'all' ? 'month' : $timeframeFilter) as 'today' | 'week' | 'month' | 'year';
+  $: activeTimeframe = $timeframeFilter;
 
   $: {
     loadDashboardStats(activeTimeframe);

@@ -30,8 +30,7 @@
   const publicGasUrl = env.PUBLIC_GAS_URL || '';
 
   $: currentPath = $page.url.pathname as string;
-  $: showTimeframeFilter = ["/", "/expenses", "/profit-loss", "/history"].includes(currentPath);
-  $: showAllOption = ["/expenses", "/history"].includes(currentPath);
+  $: showTimeframeFilter = ["/", "/expenses", "/profit-loss", "/history", "/status"].includes(currentPath);
 
   const timeframeLabels: Record<TimeframeFilter, string> = {
     today: "Hari Ini",
@@ -63,6 +62,8 @@
     } else if (currentPath === "/profit-loss") {
       loadProfitLoss(tf);
     } else if (currentPath === "/history") {
+      loadOrders(1, 10, "Semua", "Semua", "", tf);
+    } else if (currentPath === "/status") {
       loadOrders(1, 10, "Semua", "Semua", "", tf);
     }
   }
@@ -98,27 +99,26 @@
     </div>
   </div>
 
-  <!-- Actions & Global Filters -->
-  <div class="flex items-center gap-2 sm:gap-3">
-    <!-- GAS Sync Button -->
+  <!-- Header Right Actions -->
+  <div class="flex items-center gap-2.5">
+    <!-- Sync Refresh Button -->
     {#if publicGasUrl}
       <button
         type="button"
-        on:click={() => loadDataFromGAS()}
+        on:click={loadDataFromGAS}
         disabled={$isLoading}
-        class="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition relative"
-        title="Sync Spreadsheet"
+        class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition flex items-center gap-2 text-xs font-bold disabled:opacity-50"
+        title="Sinkronkan data dengan Google Apps Script"
       >
-        <RefreshCw
-          class="w-5 h-5 {$isLoading ? 'animate-spin text-blue-600' : ''}"
-        />
+        <RefreshCw class="w-4 h-4 {$isLoading ? 'animate-spin text-blue-600' : ''}" />
+        <span class="hidden md:inline">Refresh Data</span>
       </button>
     {/if}
 
     <!-- Global Timeframe Filter Selector (Next to Refresh Button) -->
     {#if showTimeframeFilter}
       <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold gap-0.5">
-        {#each (['today', 'week', 'month', 'year'] as TimeframeFilter[]) as tf}
+        {#each (['today', 'week', 'month', 'year', 'all'] as TimeframeFilter[]) as tf}
           <button
             type="button"
             on:click={() => setTimeframe(tf)}
@@ -129,17 +129,6 @@
             {timeframeLabels[tf]}
           </button>
         {/each}
-        {#if showAllOption}
-          <button
-            type="button"
-            on:click={() => setTimeframe('all')}
-            class="px-2.5 py-1 rounded-lg transition-all {$timeframeFilter === 'all'
-              ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-white shadow-sm font-extrabold'
-              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'}"
-          >
-            Semua
-          </button>
-        {/if}
       </div>
     {/if}
 
