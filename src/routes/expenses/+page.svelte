@@ -32,6 +32,7 @@
     Zap,
     Briefcase
   } from "lucide-svelte";
+  import TableRowSkeleton from '$lib/components/skeletons/TableRowSkeleton.svelte';
 
   const categories: ExpenseCategory[] = [
     "Bahan Baku / Deterjen",
@@ -89,7 +90,17 @@
   });
 
   function fetchExpenses() {
-    loadExpenses(currentPage, 10, selectedCategory, selectedYear, searchQuery, selectedTimeframe);
+    loadExpenses(currentPage, 10, selectedCategory, selectedYear, searchQuery, selectedTimeframe, sortKey, sortOrder);
+  }
+
+  let searchTimeout: any;
+
+  function handleSearchInput() {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      currentPage = 1;
+      fetchExpenses();
+    }, 400);
   }
 
   function handleSearch() {
@@ -162,18 +173,11 @@
     }
   }
 
-  $: sortedExpenses = [...$expenses].sort((a: any, b: any) => {
-    let valA = a[sortKey];
-    let valB = b[sortKey];
-    if (typeof valA === "number" && typeof valB === "number") {
-      return sortOrder === "asc" ? valA - valB : valB - valA;
+  $: {
+    if (sortKey || sortOrder) {
+      fetchExpenses();
     }
-    valA = (valA || "").toString().toLowerCase();
-    valB = (valB || "").toString().toLowerCase();
-    if (valA < valB) return sortOrder === "asc" ? -1 : 1;
-    if (valA > valB) return sortOrder === "asc" ? 1 : -1;
-    return 0;
-  });
+  }
 
   $: byCat = $expensesSummary?.byCategory || {
     "Bahan Baku / Deterjen": 0,
@@ -336,6 +340,7 @@
           type="text"
           placeholder="Cari deskripsi atau kategori..."
           bind:value={searchQuery}
+          on:input={handleSearchInput}
           on:keydown={(e) => e.key === "Enter" && handleSearch()}
           class="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 transition"
         />
@@ -360,11 +365,23 @@
   <!-- Expenses Data Table -->
   <div class="bg-white dark:bg-slate-800/80 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
     {#if $isLoading}
-      <div class="p-12 text-center text-slate-400 flex flex-col items-center gap-3">
-        <div class="w-8 h-8 border-3 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
-        <p class="text-sm font-medium">Memuat data pengeluaran...</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <th class="py-4 px-6">Tanggal / ID</th>
+              <th class="py-4 px-6">Kategori</th>
+              <th class="py-4 px-6">Deskripsi Pengeluaran</th>
+              <th class="py-4 px-6 text-right">Jumlah (Rp)</th>
+              <th class="py-4 px-6 text-center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            <TableRowSkeleton cols={5} rows={5} />
+          </tbody>
+        </table>
       </div>
-    {:else if sortedExpenses.length === 0}
+    {:else if $expenses.length === 0}
       <div class="p-12 text-center text-slate-400 flex flex-col items-center gap-3">
         <Receipt class="w-12 h-12 stroke-1 text-slate-300 dark:text-slate-600" />
         <p class="text-base font-semibold text-slate-600 dark:text-slate-300">Belum ada pengeluaran dicatat</p>
@@ -403,7 +420,7 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-            {#each sortedExpenses as exp}
+            {#each $expenses as exp}
               <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition">
                 <td class="py-4 px-6 font-medium text-slate-900 dark:text-white">
                   <div class="font-bold">{exp.tanggal}</div>

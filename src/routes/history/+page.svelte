@@ -59,7 +59,7 @@
   });
 
   function fetchOrders() {
-    loadOrders(1, 10, 'Semua', selectedYear, searchInput, selectedTimeframe);
+    loadOrders(1, 10, 'Semua', selectedYear, searchInput, selectedTimeframe, sortKey, sortOrder);
   }
 
   function selectYear(yr: string) {
@@ -76,7 +76,7 @@
 
   function goToPage(p: number) {
     if (p < 1 || p > $paginationState.totalPages) return;
-    loadOrders(p, 10, 'Semua', selectedYear, searchInput, selectedTimeframe);
+    loadOrders(p, 10, 'Semua', selectedYear, searchInput, selectedTimeframe, sortKey, sortOrder);
   }
 
   let showDeleteConfirm = false;
@@ -94,18 +94,11 @@
     }
   }
 
-  $: sortedOrders = [...$orders].sort((a: any, b: any) => {
-    let valA = a[sortKey];
-    let valB = b[sortKey];
-    if (typeof valA === 'number' && typeof valB === 'number') {
-      return sortOrder === 'asc' ? valA - valB : valB - valA;
+  $: {
+    if (sortKey || sortOrder) {
+      fetchOrders();
     }
-    valA = (valA || '').toString().toLowerCase();
-    valB = (valB || '').toString().toLowerCase();
-    if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-    if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-    return 0;
-  });
+  }
 </script>
 
 <div class="space-y-6 max-w-7xl mx-auto">
@@ -216,7 +209,7 @@
           {#if $isLoading}
             <TableRowSkeleton cols={8} rows={6} />
           {:else}
-            {#each sortedOrders as ord}
+            {#each $orders as ord}
               <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group">
                 <td class="py-4 px-6 font-mono font-bold text-blue-600 dark:text-blue-400">
                   {ord.invoice}

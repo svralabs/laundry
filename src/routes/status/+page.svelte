@@ -1,6 +1,6 @@
 <!-- ==================== HALAMAN MONITOR STATUS & DAFTAR TRANSAKSI ==================== -->
 <script lang="ts">
-  import { orders, statusSummary, loadStatusSummary, loadOrders, paginationState, isLoading } from '$stores/laundryStore';
+  import { orders, statusSummary, loadStatusSummary, loadOrders, paginationState, isLoading, timeframeFilter } from '$stores/laundryStore';
   import CardGridSkeleton from '$lib/components/skeletons/CardGridSkeleton.svelte';
   import type { OrderStatus } from '$types/laundry';
   import StatusBadge from '$components/StatusBadge.svelte';
@@ -25,26 +25,32 @@
   let searchInput = '';
   let searchTimeout: any;
 
+  $: {
+    if ($timeframeFilter) {
+      loadStatusSummary();
+      loadOrders(1, 10, activeTabFilter, 'Semua', searchInput, $timeframeFilter);
+    }
+  }
+
   onMount(() => {
-    loadStatusSummary();
-    loadOrders(1, 10, activeTabFilter, 'Semua', searchInput);
+    // Loaded via reactivity block above
   });
 
   function selectTab(st: OrderStatus | 'Semua') {
     activeTabFilter = st;
-    loadOrders(1, 10, activeTabFilter, 'Semua', searchInput);
+    loadOrders(1, 10, activeTabFilter, 'Semua', searchInput, $timeframeFilter);
   }
 
   function handleSearchInput() {
     if (searchTimeout) clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
-      loadOrders(1, 10, activeTabFilter, 'Semua', searchInput);
+      loadOrders(1, 10, activeTabFilter, 'Semua', searchInput, $timeframeFilter);
     }, 400);
   }
 
   function goToPage(p: number) {
     if (p < 1 || p > $paginationState.totalPages) return;
-    loadOrders(p, 10, activeTabFilter, 'Semua', searchInput);
+    loadOrders(p, 10, activeTabFilter, 'Semua', searchInput, $timeframeFilter);
   }
 </script>
 

@@ -35,13 +35,18 @@ function handleApiAction(action, payload) {
     var q            = (payload && payload.q)            ? payload.q            : undefined;
     var statusFilter = (payload && payload.statusFilter) ? payload.statusFilter : undefined;
     var yearFilter   = (payload && payload.yearFilter)   ? payload.yearFilter   : undefined;
-    return getPagedOrders(page, pageSize, q, statusFilter, yearFilter);
+    var timeframe    = (payload && payload.timeframe)    ? payload.timeframe    : undefined;
+    var sortKey      = (payload && payload.sortKey)      ? payload.sortKey      : undefined;
+    var sortDir      = (payload && payload.sortDir)      ? payload.sortDir      : undefined;
+    return getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, sortKey, sortDir);
   }
   if (action === 'getCustomers') {
     var page     = (payload && payload.page)     ? parseInt(payload.page)     : 1;
     var pageSize = (payload && payload.pageSize) ? parseInt(payload.pageSize) : 10;
     var q        = (payload && payload.q)        ? payload.q        : undefined;
-    return getPagedCustomers(page, pageSize, q);
+    var sortKey  = (payload && payload.sortKey)  ? payload.sortKey  : undefined;
+    var sortDir  = (payload && payload.sortDir)  ? payload.sortDir  : undefined;
+    return getPagedCustomers(page, pageSize, q, sortKey, sortDir);
   }
   if (action === 'getExpenses') {
     var page           = (payload && payload.page)           ? parseInt(payload.page)           : 1;
@@ -50,7 +55,9 @@ function handleApiAction(action, payload) {
     var categoryFilter = (payload && payload.categoryFilter) ? payload.categoryFilter : undefined;
     var yearFilter     = (payload && payload.yearFilter)     ? payload.yearFilter     : undefined;
     var timeframe      = (payload && payload.timeframe)      ? payload.timeframe      : undefined;
-    return getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timeframe);
+    var sortKey        = (payload && payload.sortKey)        ? payload.sortKey        : undefined;
+    var sortDir        = (payload && payload.sortDir)        ? payload.sortDir        : undefined;
+    return getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timeframe, sortKey, sortDir);
   }
 
   // ── READ — dashboard & summary ──────────────
@@ -188,13 +195,15 @@ function doGet(e) {
   var statusFilter = e && e.parameter ? e.parameter.statusFilter : undefined;
   var yearFilter   = e && e.parameter ? e.parameter.yearFilter   : undefined;
   var timeframe    = e && e.parameter ? e.parameter.timeframe    : undefined;
+  var sortKey      = e && e.parameter ? e.parameter.sortKey      : undefined;
+  var sortDir      = e && e.parameter ? e.parameter.sortDir      : undefined;
 
   var payload = null;
   if (payloadStr) {
     try { payload = JSON.parse(payloadStr); } catch(err) { payload = payloadStr; }
   }
   // Merge pagination & filter params ke payload supaya bisa dipakai handleApiAction
-  if (page || pageSize || q || statusFilter || yearFilter || timeframe) {
+  if (page || pageSize || q || statusFilter || yearFilter || timeframe || sortKey || sortDir) {
     payload = payload || {};
     if (page)         payload.page         = page;
     if (pageSize)     payload.pageSize     = pageSize;
@@ -202,6 +211,8 @@ function doGet(e) {
     if (statusFilter) payload.statusFilter = statusFilter;
     if (yearFilter)   payload.yearFilter   = yearFilter;
     if (timeframe)    payload.timeframe    = timeframe;
+    if (sortKey)      payload.sortKey      = sortKey;
+    if (sortDir)      payload.sortDir      = sortDir;
   }
 
   var result;
@@ -276,7 +287,7 @@ function invalidateCache(key) {
 // OPTIMIZED PAGINATION & DASHBOARD FUNCTIONS
 // ─────────────────────────────────────────────
 
-function getPagedOrders(page, pageSize, q, statusFilter, yearFilter) {
+function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, sortKey, sortDir) {
   var sheet = getOrCreateSheet('orders');
   var lastRow = sheet.getLastRow();
 
@@ -307,7 +318,8 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter) {
     }
   }
 
-  if ((statusFilter && statusFilter !== 'Semua') || (yearFilter && yearFilter !== 'Semua')) {
+  var needsFilter = (statusFilter && statusFilter !== 'Semua') || (yearFilter && yearFilter !== 'Semua') || (timeframe && timeframe !== 'all');
+  if (needsFilter) {
     var filtered = [];
     var statusColIdx = headers.indexOf('status');
     var tanggalColIdx = headers.indexOf('tanggal');
@@ -317,6 +329,7 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter) {
 
     var statusVals = (statusColIdx !== -1) ? sheet.getRange(startRow, statusColIdx + 1, totalRows, 1).getValues() : null;
     var tanggalVals = (tanggalColIdx !== -1) ? sheet.getRange(startRow, tanggalColIdx + 1, totalRows, 1).getValues() : null;
+    var todayStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
 
     for (var i = 0; i < matchingRowIndices.length; i++) {
       var rowNum = matchingRowIndices[i];
@@ -330,12 +343,34 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter) {
       else tVal = tVal ? tVal.toString().slice(0, 10) : '';
 
       var matchesYear = !yearFilter || yearFilter === 'Semua' || (tVal && tVal.startsWith(yearFilter));
+      var matchesTimeframe = isDateInTimeframe(tVal, timeframe, todayStr);
 
-      if (matchesStatus && matchesYear) {
+      if (matchesStatus && matchesYear && matchesTimeframe) {
         filtered.push(rowNum);
       }
     }
     matchingRowIndices = filtered;
+  }
+
+  if (sortKey) {
+    var sortColIdx = headers.indexOf(sortKey);
+    if (sortColIdx !== -1) {
+      var sortVals = sheet.getRange(2, sortColIdx + 1, lastRow - 1, 1).getValues();
+      matchingRowIndices.sort(function(a, b) {
+        var valA = sortVals[a - 2][0];
+        var valB = sortVals[b - 2][0];
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        }
+        valA = (valA || '').toString().toLowerCase();
+        valB = (valB || '').toString().toLowerCase();
+        if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+  } else if (sortDir === 'asc') {
+    matchingRowIndices.reverse();
   }
 
   var total = matchingRowIndices.length;
@@ -372,7 +407,7 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter) {
   };
 }
 
-function getPagedCustomers(page, pageSize, q) {
+function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
   var sheet = getOrCreateSheet('customers');
   var lastRow = sheet.getLastRow();
 
@@ -399,6 +434,27 @@ function getPagedCustomers(page, pageSize, q) {
     for (var r = lastRow; r >= 2; r--) {
       matchingRowIndices.push(r);
     }
+  }
+
+  if (sortKey) {
+    var sortColIdx = headers.indexOf(sortKey);
+    if (sortColIdx !== -1) {
+      var sortVals = sheet.getRange(2, sortColIdx + 1, lastRow - 1, 1).getValues();
+      matchingRowIndices.sort(function(a, b) {
+        var valA = sortVals[a - 2][0];
+        var valB = sortVals[b - 2][0];
+        if (typeof valA === 'number' && typeof valB === 'number') {
+          return sortDir === 'asc' ? valA - valB : valB - valA;
+        }
+        valA = (valA || '').toString().toLowerCase();
+        valB = (valB || '').toString().toLowerCase();
+        if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+        if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+  } else if (sortDir === 'asc') {
+    matchingRowIndices.reverse();
   }
 
   var total = matchingRowIndices.length;
@@ -474,7 +530,7 @@ function isDateInTimeframe(dStr, timeframe, todayStr) {
   return true;
 }
 
-function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timeframe) {
+function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timeframe, sortKey, sortDir) {
   page = parseInt(page, 10) || 1;
   pageSize = parseInt(pageSize, 10) || 10;
   categoryFilter = categoryFilter || 'Semua';
@@ -541,6 +597,23 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
         filtered.push(obj);
       }
     }
+  }
+
+  if (sortKey) {
+    filtered.sort(function(a, b) {
+      var valA = a[sortKey];
+      var valB = b[sortKey];
+      if (typeof valA === 'number' && typeof valB === 'number') {
+        return sortDir === 'asc' ? valA - valB : valB - valA;
+      }
+      valA = (valA || '').toString().toLowerCase();
+      valB = (valB || '').toString().toLowerCase();
+      if (valA < valB) return sortDir === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  } else if (sortDir === 'asc') {
+    filtered.reverse();
   }
 
   var total = filtered.length;
@@ -915,7 +988,9 @@ function getDashboardStatsData(timeframe) {
       chartData: chartData,
       recentOrders: recentOrders,
       activeProgress: activeProgress,
-      growthPct: growthPct
+      growthPct: growthPct,
+      periodOrdersCount: periodOrdersCount,
+      averageOrderValue: averageOrderValue
     };
   }, 60);
 }

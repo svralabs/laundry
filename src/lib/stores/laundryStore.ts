@@ -159,11 +159,11 @@ export async function loadStatusSummary() {
   }
 }
 
-export async function loadCustomers(page = 1, pageSize = 10, q = '') {
+export async function loadCustomers(page = 1, pageSize = 10, q = '', sortKey?: string, sortDir?: string) {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page, pageSize, q });
+    const res = await fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page, pageSize, q, sortKey, sortDir });
     if (res.success && Array.isArray(res.data)) {
       customers.set(res.data);
       if (res.meta) {
@@ -186,12 +186,12 @@ export async function loadCustomers(page = 1, pageSize = 10, q = '') {
   }
 }
 
-export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe?: TimeframeFilter) {
+export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe?: TimeframeFilter, sortKey?: string, sortDir?: string) {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   const tf = timeframe || get(timeframeFilter) || 'all';
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, statusFilter, yearFilter, q, timeframe: tf });
+    const res = await fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, statusFilter, yearFilter, q, timeframe: tf, sortKey, sortDir });
     if (res.success && Array.isArray(res.data)) {
       orders.set(res.data);
       if (res.meta) {
@@ -214,12 +214,12 @@ export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua'
   }
 }
 
-export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe?: TimeframeFilter) {
+export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe?: TimeframeFilter, sortKey?: string, sortDir?: string) {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   const tf = timeframe || get(timeframeFilter) || 'all';
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Expense[]>(PUBLIC_GAS_URL, 'getExpenses', { page, pageSize, categoryFilter, yearFilter, q, timeframe: tf });
+    const res = await fetchFromGAS<Expense[]>(PUBLIC_GAS_URL, 'getExpenses', { page, pageSize, categoryFilter, yearFilter, q, timeframe: tf, sortKey, sortDir });
     if (res.success && Array.isArray(res.data)) {
       expenses.set(res.data);
       if (res.meta) {

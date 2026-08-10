@@ -45,19 +45,23 @@
   }
 
   onMount(() => {
-    loadCustomers(1, 10, searchInput);
+    fetchCustomers();
   });
+
+  function fetchCustomers() {
+    loadCustomers(1, 10, searchInput, sortKey, sortOrder);
+  }
 
   function handleSearchInput() {
     if (searchTimeout) clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
-      loadCustomers(1, 10, searchInput);
+      fetchCustomers();
     }, 400);
   }
 
   function goToPage(p: number) {
     if (p < 1 || p > $paginationState.totalPages) return;
-    loadCustomers(p, 10, searchInput);
+    loadCustomers(p, 10, searchInput, sortKey, sortOrder);
   }
 
   function handleOpenAdd() {
@@ -82,18 +86,11 @@
     }
   }
 
-  $: sortedCustomers = [...$customers].sort((a: any, b: any) => {
-    let valA = a[sortKey];
-    let valB = b[sortKey];
-    if (typeof valA === 'number' && typeof valB === 'number') {
-      return sortOrder === 'asc' ? valA - valB : valB - valA;
+  $: {
+    if (sortKey || sortOrder) {
+      fetchCustomers();
     }
-    valA = (valA || '').toString().toLowerCase();
-    valB = (valB || '').toString().toLowerCase();
-    if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
-    if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
-    return 0;
-  });
+  }
 </script>
 
 <div class="space-y-6 max-w-7xl mx-auto">
@@ -187,7 +184,7 @@
           {#if $isLoading}
             <TableRowSkeleton cols={6} rows={5} />
           {:else}
-            {#each sortedCustomers as cust}
+            {#each $customers as cust}
               <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group">
                 <td class="py-4 px-6 font-mono font-bold text-blue-600 dark:text-blue-400">
                   {cust.id}
