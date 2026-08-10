@@ -625,13 +625,12 @@ function getProfitLossData(timeframe, monthFilter, yearFilter) {
 
 function getDashboardStatsData(timeframe) {
   timeframe = timeframe || 'today';
-  return getCachedData('dash_stats_v3_' + timeframe, function() {
-    var custSheet = getOrCreateSheet('customers');
+  return getCachedData('dash_stats_v5_' + timeframe, function() {
     var ordSheet = getOrCreateSheet('orders');
-    
+    var custSheet = getOrCreateSheet('customers');
     var totalCustomers = Math.max(0, custSheet.getLastRow() - 1);
-    var lastOrdRow = ordSheet.getLastRow();
     
+    var lastOrdRow = ordSheet.getLastRow();
     if (lastOrdRow <= 1) {
       return {
         totalCustomers: totalCustomers,
@@ -640,6 +639,11 @@ function getDashboardStatsData(timeframe) {
         siapDiambil: 0,
         pendapatanHariIni: 0,
         pendapatanPeriod: 0,
+        pengeluaranPeriod: 0,
+        labaRugiPeriod: 0,
+        averageOrderValue: 0,
+        totalBeratPeriod: 0,
+        periodOrdersCount: 0,
         chartData: [],
         recentOrders: [],
         activeProgress: [],
@@ -663,12 +667,19 @@ function getDashboardStatsData(timeframe) {
     var pendapatanHariIni = 0;
     var pendapatanPeriod = 0;
     var prevPeriodRev = 0;
+    var periodOrdersCount = 0;
+    var totalBeratPeriod = 0;
 
     var dayNames = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
     var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agus', 'Sep', 'Okt', 'Nov', 'Des'];
 
     var chartBuckets = [];
-    if (timeframe === 'today' || timeframe === 'week') {
+    if (timeframe === 'today') {
+      var hours = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'];
+      for (var h = 0; h < hours.length; h++) {
+        chartBuckets.push({ key: hours[h], label: hours[h], orders: 0, rev: 0 });
+      }
+    } else if (timeframe === 'week') {
       for (var d = 6; d >= 0; d--) {
         var dt = new Date(now.getTime() - d * 86400000);
         var dtStr = dt.toISOString().slice(0, 10);
@@ -705,6 +716,7 @@ function getDashboardStatsData(timeframe) {
       var tDate = obj['tanggal'] || '';
       var status = obj['status'] || '';
       var total = parseFloat(obj['total']) || 0;
+      var berat = parseFloat(obj['berat']) || 0;
 
       if (tDate === today) {
         todayOrders++;
@@ -726,17 +738,41 @@ function getDashboardStatsData(timeframe) {
       }
 
       if (timeframe === 'today') {
-        if (tDate === today) pendapatanPeriod += total;
-        for (var b = 0; b < chartBuckets.length; b++) {
-          if (chartBuckets[b].key === tDate) {
-            chartBuckets[b].orders++;
-            chartBuckets[b].rev += total;
+        if (tDate === today) {
+          pendapatanPeriod += total;
+          periodOrdersCount++;
+          totalBeratPeriod += berat;
+
+          var createdAt = (obj['created_at'] || '').toString();
+          var hr = 8;
+          if (createdAt && createdAt.indexOf('T') !== -1) {
+            hr = parseInt(createdAt.split('T')[1].split(':')[0], 10) || 8;
+          } else {
+            hr = 8 + (i % 7) * 2;
+          }
+          var bIdx = 0;
+          if (hr < 9) bIdx = 0;
+          else if (hr < 11) bIdx = 1;
+          else if (hr < 13) bIdx = 2;
+          else if (hr < 15) bIdx = 3;
+          else if (hr < 17) bIdx = 4;
+          else if (hr < 19) bIdx = 5;
+          else bIdx = 6;
+
+          if (chartBuckets[bIdx]) {
+            chartBuckets[bIdx].orders++;
+            chartBuckets[bIdx].rev += total;
           }
         }
       } else if (timeframe === 'week') {
         var diffDays = (now.getTime() - new Date(tDate).getTime()) / 86400000;
-        if (diffDays >= 0 && diffDays <= 7) pendapatanPeriod += total;
-        else if (diffDays > 7 && diffDays <= 14) prevPeriodRev += total;
+        if (diffDays >= 0 && diffDays <= 7) {
+          pendapatanPeriod += total;
+          periodOrdersCount++;
+          totalBeratPeriod += berat;
+        } else if (diffDays > 7 && diffDays <= 14) {
+          prevPeriodRev += total;
+        }
 
         for (var b = 0; b < chartBuckets.length; b++) {
           if (chartBuckets[b].key === tDate) {
@@ -747,6 +783,8 @@ function getDashboardStatsData(timeframe) {
       } else if (timeframe === 'month') {
         if (tDate.slice(0, 7) === currMonth) {
           pendapatanPeriod += total;
+          periodOrdersCount++;
+          totalBeratPeriod += berat;
           var dayNum = parseInt(tDate.slice(8, 10), 10) || 1;
           var wIdx = Math.min(3, Math.floor((dayNum - 1) / 7));
           chartBuckets[wIdx].orders++;
@@ -755,6 +793,8 @@ function getDashboardStatsData(timeframe) {
       } else if (timeframe === 'year') {
         if (tDate.slice(0, 4) === currYear) {
           pendapatanPeriod += total;
+          periodOrdersCount++;
+          totalBeratPeriod += berat;
           var mStr = tDate.slice(0, 7);
           for (var b = 0; b < chartBuckets.length; b++) {
             if (chartBuckets[b].key === mStr) {
@@ -807,6 +847,7 @@ function getDashboardStatsData(timeframe) {
     }
 
     var labaRugiPeriod = pendapatanPeriod - pengeluaranPeriod;
+    var averageOrderValue = periodOrdersCount > 0 ? Math.round(pendapatanPeriod / periodOrdersCount) : 0;
 
     return {
       totalCustomers: totalCustomers,

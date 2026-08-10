@@ -125,14 +125,14 @@
         <StatCard
           title="Total Pelanggan"
           value={$dashboardStats.totalCustomers}
-          subtitle="Orang terdaftar"
+          subtitle="Pelanggan terdaftar"
           icon={Users}
           iconColor="text-blue-600 bg-blue-50 dark:bg-blue-950/60"
         />
         <StatCard
-          title="Pesanan Hari Ini"
+          title="Pesanan Masuk"
           value={$dashboardStats.todayOrders}
-          subtitle="Nota masuk"
+          subtitle="Total nota masuk"
           icon={ShoppingBag}
           iconColor="text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60"
         />
@@ -151,20 +151,20 @@
           iconColor="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60"
         />
         <StatCard
-          title="Omset Periode Pilihan"
+          title="OMZET KOTOR"
           value={formatRupiah($dashboardStats.pendapatanPeriod)}
-          subtitle="Omset {timeframeLabels[activeTimeframe]}"
+          subtitle="Pemasukan {timeframeLabels[activeTimeframe]}"
           trendUp={true}
         />
         <StatCard
-          title="Pengeluaran Periode Pilihan"
+          title="TOTAL PENGELUARAN"
           value={formatRupiah($dashboardStats.pengeluaranPeriod || 0)}
           subtitle="Biaya {timeframeLabels[activeTimeframe]}"
           icon={TrendingUp}
           iconColor="text-rose-600 bg-rose-50 dark:bg-rose-950/60"
         />
         <StatCard
-          title="Laba / Rugi Bersih"
+          title="LABA / RUGI BERSIH"
           value={formatRupiah($dashboardStats.labaRugiPeriod || 0)}
           subtitle={($dashboardStats.labaRugiPeriod || 0) >= 0 ? "LABA BERSIH" : "RUGI BERSIH"}
           trendUp={($dashboardStats.labaRugiPeriod || 0) >= 0}
@@ -172,9 +172,11 @@
           iconColor={($dashboardStats.labaRugiPeriod || 0) >= 0 ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60" : "text-rose-600 bg-rose-50 dark:bg-rose-950/60"}
         />
         <StatCard
-          title="Omset Hari Ini"
-          value={formatRupiah($dashboardStats.pendapatanHariIni)}
-          subtitle="Total hari ini"
+          title="RERATA TRANSAKSI"
+          value={formatRupiah($dashboardStats.averageOrderValue || 0)}
+          subtitle="Rata-rata per nota ({timeframeLabels[activeTimeframe]})"
+          icon={Shirt}
+          iconColor="text-purple-600 bg-purple-50 dark:bg-purple-950/60"
         />
       {/if}
     </div>

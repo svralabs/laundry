@@ -129,6 +129,9 @@ export interface DashboardStatsData {
   pendapatanPeriod: number;
   pengeluaranPeriod?: number;
   labaRugiPeriod?: number;
+  averageOrderValue?: number;
+  totalBeratPeriod?: number;
+  periodOrdersCount?: number;
   chartData?: ChartDataItem[];
   recentOrders?: Order[];
   activeProgress?: Order[];
