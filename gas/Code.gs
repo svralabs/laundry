@@ -100,16 +100,19 @@ function handleApiAction(action, payload) {
   // ── WRITE — customers ──────────────────────
   if (action === 'addCustomer') {
     appendSheetRow('customers', payload);
+    bumpCacheVersion('customers');
     return { success: true, message: 'Customer added' };
   }
   if (action === 'updateCustomer') {
     if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     updateSheetRow('customers', payload.id, payload);
+    bumpCacheVersion('customers');
     return { success: true, message: 'Customer updated' };
   }
   if (action === 'deleteCustomer') {
     if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     deleteSheetRow('customers', payload.id);
+    bumpCacheVersion('customers');
     return { success: true, message: 'Customer deleted' };
   }
 
@@ -117,18 +120,21 @@ function handleApiAction(action, payload) {
   if (action === 'addOrder') {
     appendSheetRow('orders', payload);
     invalidateSummaryCache();
+    bumpCacheVersion('orders');
     return { success: true, message: 'Order added' };
   }
   if (action === 'updateOrderStatus') {
     if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     updateSheetRow('orders', payload.id, { status: payload.status, updated_at: payload.updated_at || new Date().toISOString() });
     invalidateSummaryCache();
+    bumpCacheVersion('orders');
     return { success: true, message: 'Status updated' };
   }
   if (action === 'deleteOrder') {
     if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     deleteSheetRow('orders', payload.id);
     invalidateSummaryCache();
+    bumpCacheVersion('orders');
     return { success: true, message: 'Order deleted' };
   }
 
@@ -138,18 +144,21 @@ function handleApiAction(action, payload) {
     if (!payload.created_at) payload.created_at = new Date().toISOString();
     appendSheetRow('expenses', payload);
     invalidateSummaryCache();
+    bumpCacheVersion('expenses');
     return { success: true, message: 'Expense added' };
   }
   if (action === 'updateExpense') {
     if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     updateSheetRow('expenses', payload.id, payload);
     invalidateSummaryCache();
+    bumpCacheVersion('expenses');
     return { success: true, message: 'Expense updated' };
   }
   if (action === 'deleteExpense') {
     if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     deleteSheetRow('expenses', payload.id);
     invalidateSummaryCache();
+    bumpCacheVersion('expenses');
     return { success: true, message: 'Expense deleted' };
   }
 
@@ -184,6 +193,9 @@ function handleApiAction(action, payload) {
     if (payload && Array.isArray(payload.customers)) setSheetData('customers', payload.customers);
     if (payload && Array.isArray(payload.orders))    setSheetData('orders',    payload.orders);
     if (payload && Array.isArray(payload.services))  { setSheetData('services', payload.services); invalidateCache('services'); }
+    bumpCacheVersion('customers');
+    bumpCacheVersion('orders');
+    bumpCacheVersion('services');
     return { success: true, message: 'Semua data berhasil disinkronkan ke Spreadsheet!' };
   }
 
@@ -287,6 +299,25 @@ function invalidateCache(key) {
   } catch(e) {}
 }
 
+/** Ambil versi cache per sheet untuk Global Cache Versioning Pattern */
+function getCacheVersion(sheetName) {
+  var cache = CacheService.getScriptCache();
+  var ver = cache.get('ver_' + sheetName);
+  if (!ver) {
+    ver = Date.now().toString();
+    try { cache.put('ver_' + sheetName, ver, 21600); } catch(e) {}
+  }
+  return ver;
+}
+
+/** Invalidate cache per sheet dengan menaikkan versi timestamp */
+function bumpCacheVersion(sheetName) {
+  try {
+    var cache = CacheService.getScriptCache();
+    cache.put('ver_' + sheetName, Date.now().toString(), 21600);
+  } catch(e) {}
+}
+
 // ─────────────────────────────────────────────
 // P2-A: PAGINATED READ
 // ─────────────────────────────────────────────
@@ -322,11 +353,23 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
   timeframe = timeframe || 'today';
   sortDir = sortDir || 'desc';
 
+  var ver = getCacheVersion('orders');
+  var cacheKey = 'ord_v_' + ver + '_' + page + '_' + pageSize + '_' + (q||'') + '_' + (statusFilter||'') + '_' + (yearFilter||'') + '_' + (timeframe||'') + '_' + (sortKey||'') + '_' + sortDir;
+
+  try {
+    var cached = CacheService.getScriptCache().get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch(e) {}
+
   var sheet = getOrCreateSheet('orders');
   var lastRow = sheet.getLastRow();
 
   if (lastRow <= 1) {
-    return { success: true, data: [], meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0, from: 0, to: 0 } };
+    var emptyRes = { success: true, data: [], meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0, from: 0, to: 0 } };
+    try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(emptyRes), 300); } catch(e) {}
+    return emptyRes;
   }
 
   var numCols = HEADERS_MAP['orders'].length;
@@ -377,7 +420,7 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
   var from = total === 0 ? 0 : startIdx + 1;
   var to = Math.min(startIdx + pageSize, total);
 
-  return {
+  var result = {
     success: true,
     data: rows,
     meta: {
@@ -389,6 +432,15 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
       to: to
     }
   };
+
+  try {
+    var jsonStr = JSON.stringify(result);
+    if (jsonStr.length < 95000) {
+      CacheService.getScriptCache().put(cacheKey, jsonStr, 300);
+    }
+  } catch(e) {}
+
+  return result;
 }
 
 function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
@@ -396,11 +448,23 @@ function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
   pageSize = parseInt(pageSize, 10) || 10;
   sortDir = sortDir || 'asc';
 
+  var ver = getCacheVersion('customers');
+  var cacheKey = 'cust_v_' + ver + '_' + page + '_' + pageSize + '_' + (q||'') + '_' + (sortKey||'') + '_' + sortDir;
+
+  try {
+    var cached = CacheService.getScriptCache().get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch(e) {}
+
   var sheet = getOrCreateSheet('customers');
   var lastRow = sheet.getLastRow();
 
   if (lastRow <= 1) {
-    return { success: true, data: [], meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0, from: 0, to: 0 } };
+    var emptyRes = { success: true, data: [], meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0, from: 0, to: 0 } };
+    try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(emptyRes), 180); } catch(e) {}
+    return emptyRes;
   }
 
   var numCols = HEADERS_MAP['customers'].length;
@@ -443,7 +507,7 @@ function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
   var from = total === 0 ? 0 : startIdx + 1;
   var to = Math.min(startIdx + pageSize, total);
 
-  return {
+  var result = {
     success: true,
     data: rows,
     meta: {
@@ -455,6 +519,15 @@ function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
       to: to
     }
   };
+
+  try {
+    var jsonStr = JSON.stringify(result);
+    if (jsonStr.length < 95000) {
+      CacheService.getScriptCache().put(cacheKey, jsonStr, 180);
+    }
+  } catch(e) {}
+
+  return result;
 }
 
 function isDateInTimeframe(dStr, timeframe, todayStr) {
@@ -505,6 +578,16 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
   timeframe = timeframe || 'today';
   sortDir = sortDir || 'desc';
 
+  var ver = getCacheVersion('expenses');
+  var cacheKey = 'exp_v_' + ver + '_' + page + '_' + pageSize + '_' + (q||'') + '_' + (categoryFilter||'') + '_' + (yearFilter||'') + '_' + (timeframe||'') + '_' + (sortKey||'') + '_' + sortDir;
+
+  try {
+    var cached = CacheService.getScriptCache().get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached);
+    }
+  } catch(e) {}
+
   var sheet = getOrCreateSheet('expenses');
   var lastRow = sheet.getLastRow();
 
@@ -518,12 +601,14 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
   var totalExpenseFiltered = 0;
 
   if (lastRow <= 1) {
-    return {
+    var emptyRes = {
       success: true,
       data: [],
       meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0, from: 0, to: 0 },
       summary: { totalExpenses: 0, byCategory: byCategory, totalCount: 0 }
     };
+    try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(emptyRes), 300); } catch(e) {}
+    return emptyRes;
   }
 
   var numCols = HEADERS_MAP['expenses'].length;
@@ -534,6 +619,7 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
   var filtered = [];
   var qLower = q ? q.toString().toLowerCase() : '';
   var catFilterTrim = categoryFilter.toString().trim();
+  var totalCountInTimeframe = 0;
 
   for (var i = 0; i < data.length; i++) {
     var row = data[i];
@@ -549,6 +635,7 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
     var cat = (obj['kategori'] || 'Operasional & Lain-lain').toString().trim();
 
     if (isDateInTimeframe(tDate, timeframe, todayStr)) {
+      totalCountInTimeframe++;
       totalExpenseFiltered += amount;
       if (byCategory[cat] !== undefined) {
         byCategory[cat] += amount;
@@ -583,7 +670,7 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
   var from = total === 0 ? 0 : startIdx + 1;
   var to = Math.min(startIdx + pageSize, total);
 
-  return {
+  var result = {
     success: true,
     data: rows,
     meta: {
@@ -600,6 +687,15 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
       totalCount: totalCountInTimeframe
     }
   };
+
+  try {
+    var jsonStr = JSON.stringify(result);
+    if (jsonStr.length < 95000) {
+      CacheService.getScriptCache().put(cacheKey, jsonStr, 300);
+    }
+  } catch(e) {}
+
+  return result;
 }
 
 function getProfitLossData(timeframe, monthFilter, yearFilter) {
