@@ -272,12 +272,17 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter) {
     var statusColIdx = headers.indexOf('status');
     var tanggalColIdx = headers.indexOf('tanggal');
 
-    var statusVals = (statusColIdx !== -1) ? sheet.getRange(2, statusColIdx + 1, lastRow - 1, 1).getValues() : null;
-    var tanggalVals = (tanggalColIdx !== -1) ? sheet.getRange(2, tanggalColIdx + 1, lastRow - 1, 1).getValues() : null;
+    var scanRows = Math.min(lastRow - 1, 20000);
+    var startRow = lastRow - scanRows + 1;
+
+    var statusVals = (statusColIdx !== -1) ? sheet.getRange(startRow, statusColIdx + 1, scanRows, 1).getValues() : null;
+    var tanggalVals = (tanggalColIdx !== -1) ? sheet.getRange(startRow, tanggalColIdx + 1, scanRows, 1).getValues() : null;
 
     for (var i = 0; i < matchingRowIndices.length; i++) {
       var rowNum = matchingRowIndices[i];
-      var arrayIdx = rowNum - 2;
+      if (rowNum < startRow) continue;
+
+      var arrayIdx = rowNum - startRow;
 
       var stVal = statusVals ? statusVals[arrayIdx][0] : '';
       var matchesStatus = !statusFilter || statusFilter === 'Semua' || stVal === statusFilter;
