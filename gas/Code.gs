@@ -561,53 +561,56 @@ function checkAndSendCapacityAlert(capacity) {
 // ─────────────────────────────────────────────
 
 /**
- * Script untuk generate data dummy (ratusan row) langsung ke Sheet
- * Menggunakan batch write (setValues) agar super cepat dan hemat kuota Apps Script.
+ * Script untuk generate data dummy skala besar (RATUSAN RIBU ROW) langsung ke Sheet
+ * Menggunakan chunking (batch per 5.000 row + SpreadsheetApp.flush) agar memori aman.
  */
 function seedDummyData() {
-  var NUM_CUSTOMERS = 50; // Jumlah customer dummy (dapat diubah)
-  var NUM_ORDERS = 300;   // Jumlah order dummy (dapat diubah)
+  var TOTAL_CUSTOMERS = 5000;   // 5.000 Pelanggan Dummy
+  var TOTAL_ORDERS    = 100000; // 100.000 Transaksi Order Dummy
+  var CHUNK_SIZE      = 5000;   // Tulis per 5.000 baris per batch write
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-  // ── 1. SEED CUSTOMERS ──────────────────────
+  // ── 1. SEED CUSTOMERS (5.000 baris) ──────────────────────
   var customerSheet = ss.getSheetByName('customers');
   if (!customerSheet) {
     customerSheet = ss.insertSheet('customers');
     customerSheet.appendRow(['id', 'nama', 'hp', 'alamat', 'created_at']);
   }
 
-  var customerRows = [];
+  var existingCustCount = Math.max(0, customerSheet.getLastRow() - 1);
   var customerIds = [];
-  var customerNames = [];
-  var customerHps = [];
 
-  for (var c = 1; c <= NUM_CUSTOMERS; c++) {
-    var cId = 'CUST-DEMO-' + ('000' + c).slice(-3);
-    var cName = 'Pelanggan Test ' + c;
-    var cHp = '0812000' + ('0000' + c).slice(-4);
-    var cAlamat = 'Jl. Demo Testing No. ' + c + ', Jakarta';
-    var cCreated = new Date(Date.now() - Math.floor(Math.random() * 30) * 86400000).toISOString().slice(0, 10);
+  for (var c = 1; c <= TOTAL_CUSTOMERS; c += CHUNK_SIZE) {
+    var chunkRows = [];
+    var limit = Math.min(c + CHUNK_SIZE - 1, TOTAL_CUSTOMERS);
+    
+    for (var i = c; i <= limit; i++) {
+      var cId = 'CUST-' + ('00000' + (existingCustCount + i)).slice(-6);
+      var cName = 'Pelanggan Test ' + (existingCustCount + i);
+      var cHp = '0812' + ('00000000' + i).slice(-8);
+      var cAlamat = 'Jl. Testing Performa No. ' + i + ', Jakarta';
+      var cCreated = new Date(Date.now() - Math.floor(Math.random() * 90) * 86400000).toISOString().slice(0, 10);
 
-    customerIds.push(cId);
-    customerNames.push(cName);
-    customerHps.push(cHp);
+      customerIds.push(cId);
+      chunkRows.push([cId, cName, cHp, cAlamat, cCreated]);
+    }
 
-    customerRows.push([cId, cName, cHp, cAlamat, cCreated]);
+    if (chunkRows.length > 0) {
+      var lastRow = customerSheet.getLastRow();
+      customerSheet.getRange(lastRow + 1, 1, chunkRows.length, 5).setValues(chunkRows);
+      SpreadsheetApp.flush();
+    }
   }
 
-  if (customerRows.length > 0) {
-    var lastCustRow = customerSheet.getLastRow();
-    customerSheet.getRange(lastCustRow + 1, 1, customerRows.length, 5).setValues(customerRows);
-  }
-
-  // ── 2. SEED ORDERS ────────────────────────
+  // ── 2. SEED ORDERS (100.000 baris) ────────────────────────
   var orderSheet = ss.getSheetByName('orders');
   if (!orderSheet) {
     orderSheet = ss.insertSheet('orders');
     orderSheet.appendRow(['id', 'invoice', 'tanggal', 'customer_id', 'customer_nama', 'customer_hp', 'service_id', 'service_nama', 'berat', 'harga', 'subtotal', 'diskon', 'total', 'status', 'estimasi', 'catatan', 'created_at', 'updated_at']);
   }
 
+  var existingOrdCount = Math.max(0, orderSheet.getLastRow() - 1);
   var statuses = ['Masuk', 'Dicuci', 'Disetrika', 'Selesai', 'Diambil'];
   var servicesList = [
     { id: 'SRV-001', nama: 'Cuci Komplit Reguler', harga: 8000 },
@@ -616,63 +619,68 @@ function seedDummyData() {
     { id: 'SRV-004', nama: 'Cuci Bed Cover Jumbo', harga: 35000 }
   ];
 
-  var orderRows = [];
   var startDate = new Date();
-  startDate.setDate(startDate.getDate() - 60);
+  startDate.setDate(startDate.getDate() - 180);
 
-  for (var o = 1; o <= NUM_ORDERS; o++) {
-    var oId = 'ORD-DEMO-' + ('0000' + o).slice(-4);
-    var inv = 'INV/DEMO/' + ('0000' + o).slice(-4);
-    
-    var custIdx = Math.floor(Math.random() * NUM_CUSTOMERS);
-    var srvIdx = Math.floor(Math.random() * servicesList.length);
-    var srv = servicesList[srvIdx];
+  for (var o = 1; o <= TOTAL_ORDERS; o += CHUNK_SIZE) {
+    var chunkRows = [];
+    var limit = Math.min(o + CHUNK_SIZE - 1, TOTAL_ORDERS);
 
-    var randomDays = Math.floor(Math.random() * 60);
-    var ordDateObj = new Date(startDate.getTime() + randomDays * 86400000);
-    var ordDate = ordDateObj.toISOString().slice(0, 10);
-    var ordTime = ordDate + ' 10:00';
+    for (var j = o; j <= limit; j++) {
+      var idx = existingOrdCount + j;
+      var oId = 'ORD-' + ('000000' + idx).slice(-7);
+      var inv = 'INV/' + ('000000' + idx).slice(-7);
+      
+      var custIdx = Math.floor(Math.random() * customerIds.length);
+      var srv = servicesList[Math.floor(Math.random() * servicesList.length)];
 
-    var berat = Math.floor(Math.random() * 8) + 1;
-    var harga = srv.harga;
-    var subtotal = berat * harga;
-    var diskon = (o % 5 === 0) ? 5000 : 0;
-    var total = Math.max(0, subtotal - diskon);
-    var status = statuses[Math.floor(Math.random() * statuses.length)];
+      var randomDays = Math.floor(Math.random() * 180);
+      var ordDateObj = new Date(startDate.getTime() + randomDays * 86400000);
+      var ordDate = ordDateObj.toISOString().slice(0, 10);
+      var ordTime = ordDate + ' 10:00';
 
-    var estDate = new Date(ordDateObj.getTime() + 2 * 86400000).toISOString().slice(0, 10);
-    var catatan = (o % 3 === 0) ? 'Pakaian wangi lavender' : '';
+      var berat = Math.floor(Math.random() * 8) + 1;
+      var harga = srv.harga;
+      var subtotal = berat * harga;
+      var diskon = (j % 5 === 0) ? 5000 : 0;
+      var total = Math.max(0, subtotal - diskon);
+      var status = statuses[Math.floor(Math.random() * statuses.length)];
 
-    orderRows.push([
-      oId,
-      inv,
-      ordDate,
-      customerIds[custIdx],
-      customerNames[custIdx],
-      customerHps[custIdx],
-      srv.id,
-      srv.nama,
-      berat,
-      harga,
-      subtotal,
-      diskon,
-      total,
-      status,
-      estDate,
-      catatan,
-      ordTime,
-      ordTime
-    ]);
-  }
+      var estDate = new Date(ordDateObj.getTime() + 2 * 86400000).toISOString().slice(0, 10);
+      var catatan = (j % 4 === 0) ? 'Pakaian wangi lavender' : '';
 
-  if (orderRows.length > 0) {
-    var lastOrdRow = orderSheet.getLastRow();
-    orderSheet.getRange(lastOrdRow + 1, 1, orderRows.length, 18).setValues(orderRows);
+      chunkRows.push([
+        oId,
+        inv,
+        ordDate,
+        customerIds[custIdx] || 'CUST-DEMO-001',
+        'Pelanggan Test ' + (custIdx + 1),
+        '0812' + ('00000000' + (custIdx + 1)).slice(-8),
+        srv.id,
+        srv.nama,
+        berat,
+        harga,
+        subtotal,
+        diskon,
+        total,
+        status,
+        estDate,
+        catatan,
+        ordTime,
+        ordTime
+      ]);
+    }
+
+    if (chunkRows.length > 0) {
+      var lastOrdRow = orderSheet.getLastRow();
+      orderSheet.getRange(lastOrdRow + 1, 1, chunkRows.length, 18).setValues(chunkRows);
+      SpreadsheetApp.flush();
+    }
   }
 
   try {
     CacheService.getScriptCache().remove('capacity_metrics');
   } catch(e) {}
 
-  Logger.log('BERHASIL GENERATE: ' + NUM_CUSTOMERS + ' Customers & ' + NUM_ORDERS + ' Orders!');
+  Logger.log('🔥 BERHASIL GENERATE DUMMY SKALA BESAR: ' + TOTAL_CUSTOMERS + ' Customers & ' + TOTAL_ORDERS + ' Orders!');
 }
