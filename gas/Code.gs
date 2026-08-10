@@ -103,10 +103,12 @@ function handleApiAction(action, payload) {
     return { success: true, message: 'Customer added' };
   }
   if (action === 'updateCustomer') {
+    if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     updateSheetRow('customers', payload.id, payload);
     return { success: true, message: 'Customer updated' };
   }
   if (action === 'deleteCustomer') {
+    if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     deleteSheetRow('customers', payload.id);
     return { success: true, message: 'Customer deleted' };
   }
@@ -118,11 +120,13 @@ function handleApiAction(action, payload) {
     return { success: true, message: 'Order added' };
   }
   if (action === 'updateOrderStatus') {
+    if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     updateSheetRow('orders', payload.id, { status: payload.status, updated_at: payload.updated_at || new Date().toISOString() });
     invalidateSummaryCache();
     return { success: true, message: 'Status updated' };
   }
   if (action === 'deleteOrder') {
+    if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     deleteSheetRow('orders', payload.id);
     invalidateSummaryCache();
     return { success: true, message: 'Order deleted' };
@@ -137,11 +141,13 @@ function handleApiAction(action, payload) {
     return { success: true, message: 'Expense added' };
   }
   if (action === 'updateExpense') {
+    if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     updateSheetRow('expenses', payload.id, payload);
     invalidateSummaryCache();
     return { success: true, message: 'Expense updated' };
   }
   if (action === 'deleteExpense') {
+    if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     deleteSheetRow('expenses', payload.id);
     invalidateSummaryCache();
     return { success: true, message: 'Expense deleted' };
@@ -154,11 +160,13 @@ function handleApiAction(action, payload) {
     return { success: true, message: 'Service added' };
   }
   if (action === 'updateService') {
+    if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     updateSheetRow('services', payload.id, payload);
     invalidateCache('services');
     return { success: true, message: 'Service updated' };
   }
   if (action === 'deleteService') {
+    if (!payload || !payload.id) return { success: false, message: 'Missing required field: id' };
     deleteSheetRow('services', payload.id);
     invalidateCache('services');
     return { success: true, message: 'Service deleted' };
@@ -309,8 +317,11 @@ function compareValues(valA, valB, sortDir) {
 }
 
 function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, sortKey, sortDir) {
+  page = parseInt(page, 10) || 1;
+  pageSize = parseInt(pageSize, 10) || 10;
   timeframe = timeframe || 'today';
   sortDir = sortDir || 'desc';
+
   var sheet = getOrCreateSheet('orders');
   var lastRow = sheet.getLastRow();
 
@@ -320,92 +331,48 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
 
   var numCols = HEADERS_MAP['orders'].length;
   var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
+  var allData = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
 
-  var matchingRowIndices = [];
+  var todayStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
+  var qLower = q ? q.toString().toLowerCase() : '';
+  var filtered = [];
 
-  if (q) {
-    var searchRows = Math.min(lastRow - 1, 30000);
-    var rangeToSearch = sheet.getRange(lastRow - searchRows + 1, 1, searchRows, numCols);
-    var finder = rangeToSearch.createTextFinder(q).matchCase(false);
-    var matches = finder.findAll();
-    var matchDict = {};
-    for (var m = 0; m < Math.min(matches.length, 300); m++) {
-      var r = matches[m].getRow();
-      if (r > 1) matchDict[r] = true;
-    }
-    matchingRowIndices = Object.keys(matchDict).map(function(n) { return parseInt(n, 10); });
-  } else {
-    for (var r = 2; r <= lastRow; r++) {
-      matchingRowIndices.push(r);
-    }
-  }
-
-  var needsFilter = (statusFilter && statusFilter !== 'Semua') || (yearFilter && yearFilter !== 'Semua') || (timeframe && timeframe !== 'all');
-  if (needsFilter) {
-    var filtered = [];
-    var statusColIdx = headers.indexOf('status');
-    var tanggalColIdx = headers.indexOf('tanggal');
-
-    var totalRows = lastRow - 1;
-    var startRow = 2;
-
-    var statusVals = (statusColIdx !== -1) ? sheet.getRange(startRow, statusColIdx + 1, totalRows, 1).getValues() : null;
-    var tanggalVals = (tanggalColIdx !== -1) ? sheet.getRange(startRow, tanggalColIdx + 1, totalRows, 1).getValues() : null;
-    var todayStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
-
-    for (var i = 0; i < matchingRowIndices.length; i++) {
-      var rowNum = matchingRowIndices[i];
-      var arrayIdx = rowNum - startRow;
-
-      var stVal = statusVals ? statusVals[arrayIdx][0] : '';
-      var matchesStatus = !statusFilter || statusFilter === 'Semua' || stVal === statusFilter;
-
-      var tVal = tanggalVals ? tanggalVals[arrayIdx][0] : '';
-      if (tVal instanceof Date) tVal = tVal.toISOString().slice(0, 10);
-      else tVal = tVal ? tVal.toString().slice(0, 10) : '';
-
-      var matchesYear = !yearFilter || yearFilter === 'Semua' || (tVal && tVal.startsWith(yearFilter));
-      var matchesTimeframe = isDateInTimeframe(tVal, timeframe, todayStr);
-
-      if (matchesStatus && matchesYear && matchesTimeframe) {
-        filtered.push(rowNum);
-      }
-    }
-    matchingRowIndices = filtered;
-  }
-
-  if (sortKey) {
-    var sortColIdx = headers.indexOf(sortKey);
-    if (sortColIdx !== -1) {
-      var sortVals = sheet.getRange(2, sortColIdx + 1, lastRow - 1, 1).getValues();
-      matchingRowIndices.sort(function(a, b) {
-        var valA = sortVals[a - 2][0];
-        var valB = sortVals[b - 2][0];
-        return compareValues(valA, valB, sortDir);
-      });
-    } else {
-      if (sortDir === 'desc') matchingRowIndices.reverse();
-    }
-  } else {
-    if (sortDir === 'desc') matchingRowIndices.reverse();
-  }
-
-  var total = matchingRowIndices.length;
-  var totalPages = Math.ceil(total / pageSize) || 1;
-  var startIdx = (page - 1) * pageSize;
-  var pageIndices = matchingRowIndices.slice(startIdx, startIdx + pageSize);
-
-  var rows = [];
-  for (var p = 0; p < pageIndices.length; p++) {
-    var rowData = sheet.getRange(pageIndices[p], 1, 1, numCols).getValues()[0];
+  for (var i = 0; i < allData.length; i++) {
+    var row = allData[i];
     var obj = {};
     for (var j = 0; j < headers.length; j++) {
-      var val = rowData[j];
+      var val = row[j];
       if (val instanceof Date) val = val.toISOString().slice(0, 10);
       obj[headers[j]] = val;
     }
-    rows.push(obj);
+
+    var stVal = obj['status'] || '';
+    var tVal = (obj['tanggal'] || '').toString();
+
+    var matchesQ = !qLower || Object.values(obj).some(function(v) { return v && v.toString().toLowerCase().indexOf(qLower) !== -1; });
+    var matchesStatus = !statusFilter || statusFilter === 'Semua' || stVal === statusFilter;
+    var matchesYear = !yearFilter || yearFilter === 'Semua' || (tVal && tVal.startsWith(yearFilter));
+    var matchesTimeframe = isDateInTimeframe(tVal, timeframe, todayStr);
+
+    if (matchesQ && matchesStatus && matchesYear && matchesTimeframe) {
+      filtered.push(obj);
+    }
   }
+
+  if (sortKey) {
+    filtered.sort(function(a, b) {
+      return compareValues(a[sortKey], b[sortKey], sortDir);
+    });
+  } else {
+    if (sortDir === 'desc') {
+      filtered.reverse();
+    }
+  }
+
+  var total = filtered.length;
+  var totalPages = Math.ceil(total / pageSize) || 1;
+  var startIdx = (page - 1) * pageSize;
+  var rows = filtered.slice(startIdx, startIdx + pageSize);
 
   var from = total === 0 ? 0 : startIdx + 1;
   var to = Math.min(startIdx + pageSize, total);
@@ -425,7 +392,10 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
 }
 
 function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
+  page = parseInt(page, 10) || 1;
+  pageSize = parseInt(pageSize, 10) || 10;
   sortDir = sortDir || 'asc';
+
   var sheet = getOrCreateSheet('customers');
   var lastRow = sheet.getLastRow();
 
@@ -435,56 +405,40 @@ function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
 
   var numCols = HEADERS_MAP['customers'].length;
   var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
+  var allData = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
 
-  var matchingRowIndices = [];
+  var qLower = q ? q.toString().toLowerCase() : '';
+  var filtered = [];
 
-  if (q) {
-    var finder = sheet.getRange(2, 1, lastRow - 1, numCols).createTextFinder(q).matchCase(false);
-    var matches = finder.findAll();
-    var matchDict = {};
-    for (var m = 0; m < Math.min(matches.length, 300); m++) {
-      var r = matches[m].getRow();
-      if (r > 1) matchDict[r] = true;
+  for (var i = 0; i < allData.length; i++) {
+    var row = allData[i];
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      var val = row[j];
+      if (val instanceof Date) val = val.toISOString().slice(0, 10);
+      obj[headers[j]] = val;
     }
-    matchingRowIndices = Object.keys(matchDict).map(function(n) { return parseInt(n, 10); });
-  } else {
-    for (var r = 2; r <= lastRow; r++) {
-      matchingRowIndices.push(r);
+
+    var matchesQ = !qLower || Object.values(obj).some(function(v) { return v && v.toString().toLowerCase().indexOf(qLower) !== -1; });
+    if (matchesQ) {
+      filtered.push(obj);
     }
   }
 
   if (sortKey) {
-    var sortColIdx = headers.indexOf(sortKey);
-    if (sortColIdx !== -1) {
-      var sortVals = sheet.getRange(2, sortColIdx + 1, lastRow - 1, 1).getValues();
-      matchingRowIndices.sort(function(a, b) {
-        var valA = sortVals[a - 2][0];
-        var valB = sortVals[b - 2][0];
-        return compareValues(valA, valB, sortDir);
-      });
-    } else {
-      if (sortDir === 'desc') matchingRowIndices.reverse();
-    }
+    filtered.sort(function(a, b) {
+      return compareValues(a[sortKey], b[sortKey], sortDir);
+    });
   } else {
-    if (sortDir === 'desc') matchingRowIndices.reverse();
+    if (sortDir === 'desc') {
+      filtered.reverse();
+    }
   }
 
-  var total = matchingRowIndices.length;
+  var total = filtered.length;
   var totalPages = Math.ceil(total / pageSize) || 1;
   var startIdx = (page - 1) * pageSize;
-  var pageIndices = matchingRowIndices.slice(startIdx, startIdx + pageSize);
-
-  var rows = [];
-  for (var p = 0; p < pageIndices.length; p++) {
-    var rowData = sheet.getRange(pageIndices[p], 1, 1, numCols).getValues()[0];
-    var obj = {};
-    for (var j = 0; j < headers.length; j++) {
-      var val = rowData[j];
-      if (val instanceof Date) val = val.toISOString().slice(0, 10);
-      obj[headers[j]] = val;
-    }
-    rows.push(obj);
-  }
+  var rows = filtered.slice(startIdx, startIdx + pageSize);
 
   var from = total === 0 ? 0 : startIdx + 1;
   var to = Math.min(startIdx + pageSize, total);
@@ -1018,6 +972,11 @@ function invalidateSummaryCache() {
     cache.remove('dash_stats_v3_week');
     cache.remove('dash_stats_v3_month');
     cache.remove('dash_stats_v3_year');
+    cache.remove('dash_stats_v4_today');
+    cache.remove('dash_stats_v4_week');
+    cache.remove('dash_stats_v4_month');
+    cache.remove('dash_stats_v4_year');
+    cache.remove('dash_stats_v4_all');
   } catch(e) {}
 }
 
