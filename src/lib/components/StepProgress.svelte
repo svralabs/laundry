@@ -2,6 +2,7 @@
   import type { OrderStatus } from '$types/laundry';
   import { ORDER_STATUSES, NEXT_STATUS_MAP } from '$utils/formatters';
   import { updateOrderStatus } from '$stores/laundryStore';
+  import StatusConfirmModal from '$components/StatusConfirmModal.svelte';
   import { Check, ArrowRight } from 'lucide-svelte';
 
   export let orderId: string;
@@ -11,15 +12,27 @@
   $: currentIndex = ORDER_STATUSES.indexOf(currentStatus as any);
   $: nextStatus = NEXT_STATUS_MAP[currentStatus];
 
+  let showConfirmModal = false;
+  let targetStatusToSet: OrderStatus | null = null;
+
   function handleAdvance() {
     if (nextStatus) {
-      updateOrderStatus(orderId, nextStatus as OrderStatus);
+      targetStatusToSet = nextStatus as OrderStatus;
+      showConfirmModal = true;
     }
   }
 
   function handleSetStatus(st: OrderStatus) {
     if (st !== currentStatus) {
-      updateOrderStatus(orderId, st);
+      targetStatusToSet = st;
+      showConfirmModal = true;
+    }
+  }
+
+  function confirmStatusChange() {
+    if (targetStatusToSet) {
+      updateOrderStatus(orderId, targetStatusToSet);
+      targetStatusToSet = null;
     }
   }
 </script>
@@ -89,3 +102,12 @@
     </div>
   {/if}
 </div>
+
+<!-- Confirmation Modal for Status Updates -->
+<StatusConfirmModal
+  bind:show={showConfirmModal}
+  {currentStatus}
+  targetStatus={targetStatusToSet}
+  onConfirm={confirmStatusChange}
+  onClose={() => { showConfirmModal = false; targetStatusToSet = null; }}
+/>
