@@ -8,6 +8,8 @@
     Shirt,
     ListTodo,
     History,
+    Receipt,
+    TrendingUp,
     Settings as SettingsIcon,
     Sparkles,
     ChevronRight,
@@ -31,6 +33,8 @@
       badge: "status",
     },
     { href: "/history", label: "Riwayat", icon: History, badge: null },
+    { href: "/expenses", label: "Pengeluaran", icon: Receipt, badge: null },
+    { href: "/profit-loss", label: "Laba Rugi", icon: TrendingUp, badge: null },
     { href: "/settings", label: "Pengaturan", icon: SettingsIcon, badge: null },
   ];
 </script>

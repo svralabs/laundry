@@ -14,7 +14,8 @@ var HEADERS_MAP = {
   customers: ['id', 'nama', 'hp', 'alamat', 'created_at'],
   orders: ['id', 'invoice', 'tanggal', 'customer_id', 'customer_nama', 'customer_hp', 'service_id', 'service_nama', 'berat', 'harga', 'subtotal', 'diskon', 'total', 'status', 'estimasi', 'catatan', 'created_at', 'updated_at'],
   services: ['id', 'nama_layanan', 'harga_perkg', 'estimasi_hari', 'aktif'],
-  settings: ['nama_laundry', 'alamat', 'telepon', 'logo', 'footer', 'default_harga', 'default_estimasi']
+  settings: ['nama_laundry', 'alamat', 'telepon', 'logo', 'footer', 'default_harga', 'default_estimasi'],
+  expenses: ['id', 'tanggal', 'kategori', 'deskripsi', 'jumlah', 'created_at']
 };
 
 // ─────────────────────────────────────────────
@@ -42,6 +43,14 @@ function handleApiAction(action, payload) {
     var q        = (payload && payload.q)        ? payload.q        : undefined;
     return getPagedCustomers(page, pageSize, q);
   }
+  if (action === 'getExpenses') {
+    var page           = (payload && payload.page)           ? parseInt(payload.page)           : 1;
+    var pageSize       = (payload && payload.pageSize)       ? parseInt(payload.pageSize)       : 10;
+    var q              = (payload && payload.q)              ? payload.q              : undefined;
+    var categoryFilter = (payload && payload.categoryFilter) ? payload.categoryFilter : undefined;
+    var yearFilter     = (payload && payload.yearFilter)     ? payload.yearFilter     : undefined;
+    return getPagedExpenses(page, pageSize, q, categoryFilter, yearFilter);
+  }
 
   // ── READ — dashboard & summary ──────────────
   if (action === 'getDashboardStats') {
@@ -50,6 +59,12 @@ function handleApiAction(action, payload) {
   }
   if (action === 'getStatusSummary') {
     return { success: true, data: getStatusSummaryData() };
+  }
+  if (action === 'getProfitLoss') {
+    var timeframe   = (payload && payload.timeframe)   ? payload.timeframe   : 'month';
+    var monthFilter = (payload && payload.monthFilter) ? payload.monthFilter : undefined;
+    var yearFilter  = (payload && payload.yearFilter)  ? payload.yearFilter  : undefined;
+    return getProfitLossData(timeframe, monthFilter, yearFilter);
   }
 
   // ── READ — cached master data ──────────────
@@ -102,6 +117,25 @@ function handleApiAction(action, payload) {
     return { success: true, message: 'Order deleted' };
   }
 
+  // ── WRITE — expenses ───────────────────────
+  if (action === 'addExpense') {
+    if (!payload.id) payload.id = 'EXP-' + Date.now();
+    if (!payload.created_at) payload.created_at = new Date().toISOString();
+    appendSheetRow('expenses', payload);
+    invalidateSummaryCache();
+    return { success: true, message: 'Expense added' };
+  }
+  if (action === 'updateExpense') {
+    updateSheetRow('expenses', payload.id, payload);
+    invalidateSummaryCache();
+    return { success: true, message: 'Expense updated' };
+  }
+  if (action === 'deleteExpense') {
+    deleteSheetRow('expenses', payload.id);
+    invalidateSummaryCache();
+    return { success: true, message: 'Expense deleted' };
+  }
+
   // ── WRITE — services ──────────────────────
   if (action === 'addService') {
     appendSheetRow('services', payload);
@@ -149,19 +183,21 @@ function doGet(e) {
   var q            = e && e.parameter ? e.parameter.q            : undefined;
   var statusFilter = e && e.parameter ? e.parameter.statusFilter : undefined;
   var yearFilter   = e && e.parameter ? e.parameter.yearFilter   : undefined;
+  var timeframe    = e && e.parameter ? e.parameter.timeframe    : undefined;
 
   var payload = null;
   if (payloadStr) {
     try { payload = JSON.parse(payloadStr); } catch(err) { payload = payloadStr; }
   }
   // Merge pagination & filter params ke payload supaya bisa dipakai handleApiAction
-  if (page || pageSize || q || statusFilter || yearFilter) {
+  if (page || pageSize || q || statusFilter || yearFilter || timeframe) {
     payload = payload || {};
     if (page)         payload.page         = page;
     if (pageSize)     payload.pageSize     = pageSize;
     if (q)            payload.q            = q;
     if (statusFilter) payload.statusFilter = statusFilter;
     if (yearFilter)   payload.yearFilter   = yearFilter;
+    if (timeframe)    payload.timeframe    = timeframe;
   }
 
   var result;
@@ -395,6 +431,195 @@ function getPagedCustomers(page, pageSize, q) {
   };
 }
 
+function getPagedExpenses(page, pageSize, q, categoryFilter, yearFilter) {
+  page = page || 1;
+  pageSize = pageSize || 10;
+  var sheet = getOrCreateSheet('expenses');
+  var lastRow = sheet.getLastRow();
+
+  if (lastRow <= 1) {
+    return {
+      success: true,
+      data: [],
+      meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0, from: 0, to: 0 },
+      summary: { totalExpensesThisMonth: 0, totalExpensesToday: 0 }
+    };
+  }
+
+  var numCols = HEADERS_MAP['expenses'].length;
+  var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
+  var data = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
+
+  var today = new Date().toISOString().slice(0, 10);
+  var currMonth = today.slice(0, 7);
+  var totalExpensesThisMonth = 0;
+  var totalExpensesToday = 0;
+
+  var filtered = [];
+  var qLower = q ? q.toLowerCase() : '';
+
+  for (var i = data.length - 1; i >= 0; i--) {
+    var row = data[i];
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      var val = row[j];
+      if (val instanceof Date) val = val.toISOString().slice(0, 10);
+      obj[headers[j]] = val;
+    }
+
+    var tDate = (obj['tanggal'] || '').toString();
+    var amount = parseFloat(obj['jumlah']) || 0;
+
+    if (tDate === today) totalExpensesToday += amount;
+    if (tDate.slice(0, 7) === currMonth) totalExpensesThisMonth += amount;
+
+    var matchesQ = !qLower || (obj['deskripsi'] || '').toString().toLowerCase().indexOf(qLower) !== -1 || (obj['kategori'] || '').toString().toLowerCase().indexOf(qLower) !== -1;
+    var matchesCat = !categoryFilter || categoryFilter === 'Semua' || obj['kategori'] === categoryFilter;
+    var matchesYear = !yearFilter || yearFilter === 'Semua' || tDate.slice(0, 4) === yearFilter.toString();
+
+    if (matchesQ && matchesCat && matchesYear) {
+      filtered.push(obj);
+    }
+  }
+
+  var total = filtered.length;
+  var totalPages = Math.ceil(total / pageSize) || 1;
+  var startIdx = (page - 1) * pageSize;
+  var rows = filtered.slice(startIdx, startIdx + pageSize);
+
+  var from = total === 0 ? 0 : startIdx + 1;
+  var to = Math.min(startIdx + pageSize, total);
+
+  return {
+    success: true,
+    data: rows,
+    meta: {
+      total: total,
+      page: page,
+      pageSize: pageSize,
+      totalPages: totalPages,
+      from: from,
+      to: to
+    },
+    summary: {
+      totalExpensesThisMonth: totalExpensesThisMonth,
+      totalExpensesToday: totalExpensesToday
+    }
+  };
+}
+
+function getProfitLossData(timeframe, monthFilter, yearFilter) {
+  timeframe = timeframe || 'month';
+  var now = new Date();
+  var currYear = (yearFilter || now.getFullYear()).toString();
+  var currMonthStr = monthFilter || now.toISOString().slice(0, 7);
+
+  return getCachedData('profit_loss_' + timeframe + '_' + currMonthStr + '_' + currYear, function() {
+    var ordSheet = getOrCreateSheet('orders');
+    var expSheet = getOrCreateSheet('expenses');
+
+    var totalRevenue = 0;
+    var totalExpenses = 0;
+    var breakdownKategori = {
+      'Bahan Baku / Deterjen': 0,
+      'Listrik & Air': 0,
+      'Gaji Karyawan': 0,
+      'Maintenance Mesin': 0,
+      'Operasional & Lain-lain': 0
+    };
+
+    var monthlyData = [];
+    var monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agus', 'Sep', 'Okt', 'Nov', 'Des'];
+    for (var m = 0; m < 12; m++) {
+      var mKey = currYear + '-' + (m < 9 ? '0' + (m + 1) : (m + 1));
+      monthlyData.push({ month: mKey, label: monthNames[m], revenue: 0, expenses: 0, profit: 0 });
+    }
+
+    if (ordSheet.getLastRow() > 1) {
+      var ordHeaders = ordSheet.getRange(1, 1, 1, ordSheet.getLastColumn()).getValues()[0];
+      var scanCount = Math.min(5000, ordSheet.getLastRow() - 1);
+      var startRow = ordSheet.getLastRow() - scanCount + 1;
+      var ordData = ordSheet.getRange(startRow, 1, scanCount, ordHeaders.length).getValues();
+
+      for (var i = 0; i < ordData.length; i++) {
+        var row = ordData[i];
+        var obj = {};
+        for (var j = 0; j < ordHeaders.length; j++) {
+          var val = row[j];
+          if (val instanceof Date) val = val.toISOString().slice(0, 10);
+          obj[ordHeaders[j]] = val;
+        }
+        var tDate = (obj['tanggal'] || '').toString();
+        var total = parseFloat(obj['total']) || 0;
+
+        if (tDate.slice(0, 4) === currYear) {
+          var mIdx = parseInt(tDate.slice(5, 7), 10) - 1;
+          if (mIdx >= 0 && mIdx < 12) monthlyData[mIdx].revenue += total;
+        }
+
+        if (timeframe === 'month' && tDate.slice(0, 7) === currMonthStr) {
+          totalRevenue += total;
+        } else if (timeframe === 'year' && tDate.slice(0, 4) === currYear) {
+          totalRevenue += total;
+        }
+      }
+    }
+
+    if (expSheet.getLastRow() > 1) {
+      var expHeaders = expSheet.getRange(1, 1, 1, expSheet.getLastColumn()).getValues()[0];
+      var expData = expSheet.getRange(2, 1, expSheet.getLastRow() - 1, expHeaders.length).getValues();
+
+      for (var e = 0; e < expData.length; e++) {
+        var r = expData[e];
+        var o = {};
+        for (var k = 0; k < expHeaders.length; k++) {
+          var v = r[k];
+          if (v instanceof Date) v = v.toISOString().slice(0, 10);
+          o[expHeaders[k]] = v;
+        }
+        var eDate = (o['tanggal'] || '').toString();
+        var amount = parseFloat(o['jumlah']) || 0;
+        var cat = o['kategori'] || 'Operasional & Lain-lain';
+
+        if (eDate.slice(0, 4) === currYear) {
+          var mIdx = parseInt(eDate.slice(5, 7), 10) - 1;
+          if (mIdx >= 0 && mIdx < 12) monthlyData[mIdx].expenses += amount;
+        }
+
+        var inPeriod = (timeframe === 'month' && eDate.slice(0, 7) === currMonthStr) ||
+                       (timeframe === 'year' && eDate.slice(0, 4) === currYear);
+
+        if (inPeriod) {
+          totalExpenses += amount;
+          if (breakdownKategori[cat] !== undefined) {
+            breakdownKategori[cat] += amount;
+          } else {
+            breakdownKategori['Operasional & Lain-lain'] += amount;
+          }
+        }
+      }
+    }
+
+    for (var md = 0; md < monthlyData.length; md++) {
+      monthlyData[md].profit = monthlyData[md].revenue - monthlyData[md].expenses;
+    }
+
+    var labaRugi = totalRevenue - totalExpenses;
+    var status = labaRugi >= 0 ? 'LABA' : 'RUGI';
+
+    return {
+      timeframe: timeframe,
+      periodLabel: timeframe === 'month' ? currMonthStr : currYear,
+      totalRevenue: totalRevenue,
+      totalExpenses: totalExpenses,
+      labaRugi: labaRugi,
+      status: status,
+      breakdownKategori: breakdownKategori,
+      monthlyData: monthlyData
+    };
+  }, 60);
+}
+
 function getDashboardStatsData(timeframe) {
   timeframe = timeframe || 'today';
   return getCachedData('dash_stats_v3_' + timeframe, function() {
@@ -549,6 +774,37 @@ function getDashboardStatsData(timeframe) {
       growthPct = 24.5;
     }
 
+    var pengeluaranPeriod = 0;
+    var expSheet = getOrCreateSheet('expenses');
+    if (expSheet.getLastRow() > 1) {
+      var expHeaders = expSheet.getRange(1, 1, 1, expSheet.getLastColumn()).getValues()[0];
+      var expData = expSheet.getRange(2, 1, expSheet.getLastRow() - 1, expHeaders.length).getValues();
+      for (var e = 0; e < expData.length; e++) {
+        var er = expData[e];
+        var eo = {};
+        for (var ek = 0; ek < expHeaders.length; ek++) {
+          var ev = er[ek];
+          if (ev instanceof Date) ev = ev.toISOString().slice(0, 10);
+          eo[expHeaders[ek]] = ev;
+        }
+        var eDate = (eo['tanggal'] || '').toString();
+        var amount = parseFloat(eo['jumlah']) || 0;
+
+        if (timeframe === 'today' && eDate === today) {
+          pengeluaranPeriod += amount;
+        } else if (timeframe === 'week') {
+          var diffDaysExp = (now.getTime() - new Date(eDate).getTime()) / 86400000;
+          if (diffDaysExp >= 0 && diffDaysExp <= 7) pengeluaranPeriod += amount;
+        } else if (timeframe === 'month' && eDate.slice(0, 7) === currMonth) {
+          pengeluaranPeriod += amount;
+        } else if (timeframe === 'year' && eDate.slice(0, 4) === currYear) {
+          pengeluaranPeriod += amount;
+        }
+      }
+    }
+
+    var labaRugiPeriod = pendapatanPeriod - pengeluaranPeriod;
+
     return {
       totalCustomers: totalCustomers,
       todayOrders: todayOrders,
@@ -556,6 +812,8 @@ function getDashboardStatsData(timeframe) {
       siapDiambil: siapDiambil,
       pendapatanHariIni: pendapatanHariIni,
       pendapatanPeriod: pendapatanPeriod,
+      pengeluaranPeriod: pengeluaranPeriod,
+      labaRugiPeriod: labaRugiPeriod,
       chartData: chartData,
       recentOrders: recentOrders,
       activeProgress: activeProgress,
@@ -604,10 +862,15 @@ function invalidateSummaryCache() {
   try {
     var cache = CacheService.getScriptCache();
     cache.remove('status_summary_metrics');
+    cache.remove('status_summary_metrics_v2');
     cache.remove('dash_stats_today');
     cache.remove('dash_stats_week');
     cache.remove('dash_stats_month');
     cache.remove('dash_stats_year');
+    cache.remove('dash_stats_v3_today');
+    cache.remove('dash_stats_v3_week');
+    cache.remove('dash_stats_v3_month');
+    cache.remove('dash_stats_v3_year');
   } catch(e) {}
 }
 
@@ -971,9 +1234,54 @@ function seedDummyData() {
     }
   }
 
+  // ── 3. SEED EXPENSES (~150 baris pengeluaran dummy 2026) ─────
+  var expSheet = ss.getSheetByName('expenses');
+  if (!expSheet) {
+    expSheet = ss.insertSheet('expenses');
+    expSheet.appendRow(['id', 'tanggal', 'kategori', 'deskripsi', 'jumlah', 'created_at']);
+  }
+
+  var expCategories = [
+    { cat: 'Bahan Baku / Deterjen', items: ['Deterjen Kiloan Grade A (50kg)', 'Parfum Premium Lavender (20L)', 'Softener Pakaian Anti Bakteri', 'Plastik Packing Roll Transparan 5kg', 'Tag Stiker Barcode & Label Laundry'] },
+    { cat: 'Listrik & Air', items: ['Pembayaran Token Listrik PLN Outlet Utama', 'Tagihan Air PDAM Bulan Berjalan', 'Token Listrik Cadangan Mesin Dryer'] },
+    { cat: 'Gaji Karyawan', items: ['Gaji Kasir Shift 1', 'Gaji Operator Cuci & Strika', 'Bonus Target Operasional Kasir', 'Uang Makan & Lembur Karyawan'] },
+    { cat: 'Maintenance Mesin', items: ['Service Routine Mesin Cuci Commercial', 'Pengantian Vanbelt & Bearing Dryer', 'Maintenance Pipe Line & Boiler Ironer', 'Pembersihan Filter & Descaling Mesin'] },
+    { cat: 'Operasional & Lain-lain', items: ['Pembersih Lantai & Disinfektan Outlet', 'Konsumsi & Snack Rapat Internal', 'Alat Tulis & Kertas Struk Thermal', 'Biaya Wi-Fi & Internet Kasir'] }
+  ];
+
+  var expRows = [];
+  var startDateExp = new Date(2026, 0, 1);
+  var endDateExp = new Date(2026, 7, 10);
+  var totalDaysExp = Math.floor((endDateExp.getTime() - startDateExp.getTime()) / 86400000);
+
+  for (var expIdx = 1; expIdx <= 150; expIdx++) {
+    var randomExpDays = Math.floor(Math.random() * totalDaysExp);
+    var expDateObj = new Date(startDateExp.getTime() + randomExpDays * 86400000);
+    var expDate = expDateObj.toISOString().slice(0, 10);
+    var catObj = expCategories[expIdx % expCategories.length];
+    var desc = catObj.items[expIdx % catObj.items.length] + ' #' + expIdx;
+    
+    var baseAmount = 150000;
+    if (catObj.cat === 'Gaji Karyawan') baseAmount = 2500000 + (expIdx % 4) * 500000;
+    else if (catObj.cat === 'Listrik & Air') baseAmount = 1200000 + (expIdx % 5) * 300000;
+    else if (catObj.cat === 'Bahan Baku / Deterjen') baseAmount = 350000 + (expIdx % 6) * 150000;
+    else if (catObj.cat === 'Maintenance Mesin') baseAmount = 450000 + (expIdx % 4) * 250000;
+    else baseAmount = 150000 + (expIdx % 5) * 75000;
+
+    var expId = 'EXP-' + ('000' + expIdx).slice(-4);
+    expRows.push([expId, expDate, catObj.cat, desc, baseAmount, expDate + 'T10:00:00.000Z']);
+  }
+
+  if (expRows.length > 0) {
+    var lastExpRow = expSheet.getLastRow();
+    expSheet.getRange(lastExpRow + 1, 1, expRows.length, 6).setValues(expRows);
+    SpreadsheetApp.flush();
+  }
+
   try {
     CacheService.getScriptCache().remove('capacity_metrics');
+    invalidateSummaryCache();
   } catch(e) {}
 
-  Logger.log('🔥 BERHASIL GENERATE DUMMY SKALA BESAR: ' + TOTAL_CUSTOMERS + ' Customers & ' + TOTAL_ORDERS + ' Orders!');
+  Logger.log('🔥 BERHASIL GENERATE DUMMY SKALA BESAR: ' + TOTAL_CUSTOMERS + ' Customers, ' + TOTAL_ORDERS + ' Orders, & 150 Expenses!');
 }

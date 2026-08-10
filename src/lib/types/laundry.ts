@@ -60,6 +60,10 @@ export interface APIResponse<T = any> {
     to?: number;
     capacity?: CapacityStatus;
   };
+  summary?: {
+    totalExpensesThisMonth: number;
+    totalExpensesToday: number;
+  };
   error?: string;
 }
 
@@ -83,6 +87,39 @@ export interface ChartDataItem {
   rev: number;
 }
 
+export type ExpenseCategory = 
+  | 'Bahan Baku / Deterjen'
+  | 'Listrik & Air'
+  | 'Gaji Karyawan'
+  | 'Maintenance Mesin'
+  | 'Operasional & Lain-lain';
+
+export interface Expense {
+  id: string;
+  tanggal: string;
+  kategori: ExpenseCategory;
+  deskripsi: string;
+  jumlah: number;
+  created_at: string;
+}
+
+export interface ProfitLossSummary {
+  timeframe: 'month' | 'year';
+  periodLabel: string;
+  totalRevenue: number;
+  totalExpenses: number;
+  labaRugi: number;
+  status: 'LABA' | 'RUGI';
+  breakdownKategori: Record<string, number>;
+  monthlyData: Array<{
+    month: string;
+    label: string;
+    revenue: number;
+    expenses: number;
+    profit: number;
+  }>;
+}
+
 export interface DashboardStatsData {
   totalCustomers: number;
   todayOrders: number;
@@ -90,6 +127,8 @@ export interface DashboardStatsData {
   siapDiambil: number;
   pendapatanHariIni: number;
   pendapatanPeriod: number;
+  pengeluaranPeriod?: number;
+  labaRugiPeriod?: number;
   chartData?: ChartDataItem[];
   recentOrders?: Order[];
   activeProgress?: Order[];

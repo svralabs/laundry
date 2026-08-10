@@ -1,5 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
-import type { Customer, Order, Service, Settings, OrderStatus, ToastMessage, CapacityStatus, DashboardStatsData, StatusSummaryData } from '$types/laundry';
+import type { Customer, Order, Service, Settings, OrderStatus, ToastMessage, CapacityStatus, DashboardStatsData, StatusSummaryData, Expense, ProfitLossSummary } from '$types/laundry';
 import { generateInvoiceNumber } from '$utils/formatters';
 import { fetchFromGAS, postToGAS } from '$services/api';
 import { env } from '$env/dynamic/public'; // Using dynamic to ensure it reads from process.env on server if needed, or static
@@ -44,6 +44,10 @@ export const statusSummary = writable<StatusSummaryData>({
   Diambil: 0,
   ongoingTotal: 0
 });
+
+export const expenses = writable<Expense[]>([]);
+export const expensesSummary = writable({ totalExpensesThisMonth: 0, totalExpensesToday: 0 });
+export const profitLoss = writable<ProfitLossSummary | null>(null);
 
 export const paginationState = writable({
   page: 1,
@@ -179,6 +183,92 @@ export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua'
     }
   } catch (e) {
     console.error('[GAS API] Failed to load orders:', e);
+  } finally {
+    isLoading.set(false);
+  }
+}
+
+export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Semua', yearFilter = 'Semua', q = '') {
+  if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  isLoading.set(true);
+  try {
+    const res = await fetchFromGAS<Expense[]>(PUBLIC_GAS_URL, 'getExpenses', { page, pageSize, categoryFilter, yearFilter, q });
+    if (res.success && Array.isArray(res.data)) {
+      expenses.set(res.data);
+      if (res.meta) {
+        paginationState.set({
+          page: res.meta.page || page,
+          pageSize: res.meta.pageSize || pageSize,
+          total: res.meta.total || 0,
+          totalPages: res.meta.totalPages || 1,
+          from: res.meta.from || 0,
+          to: res.meta.to || 0,
+          isLoadingMore: false,
+          hasMore: false
+        });
+      }
+      if (res.summary) {
+        expensesSummary.set(res.summary);
+      }
+    }
+  } catch (e) {
+    console.error('[GAS API] Failed to load expenses:', e);
+  } finally {
+    isLoading.set(false);
+  }
+}
+
+export async function addExpense(payload: Omit<Expense, 'id' | 'created_at'>) {
+  if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return false;
+  isLoading.set(true);
+  try {
+    const newExpense = {
+      ...payload,
+      id: 'EXP-' + Date.now(),
+      created_at: new Date().toISOString()
+    };
+    const res = await fetchFromGAS(PUBLIC_GAS_URL, 'addExpense', newExpense);
+    if (res.success) {
+      addToast('Berhasil', 'Pengeluaran berhasil dicatat', 'success');
+      await loadExpenses();
+      return true;
+    }
+  } catch (e) {
+    addToast('Gagal', 'Gagal mencatat pengeluaran', 'error');
+  } finally {
+    isLoading.set(false);
+  }
+  return false;
+}
+
+export async function deleteExpense(id: string) {
+  if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return false;
+  isLoading.set(true);
+  try {
+    const res = await fetchFromGAS(PUBLIC_GAS_URL, 'deleteExpense', { id });
+    if (res.success) {
+      addToast('Berhasil', 'Pengeluaran berhasil dihapus', 'success');
+      await loadExpenses();
+      return true;
+    }
+  } catch (e) {
+    addToast('Gagal', 'Gagal menghapus pengeluaran', 'error');
+  } finally {
+    isLoading.set(false);
+  }
+  return false;
+}
+
+export async function loadProfitLoss(timeframe: 'month' | 'year' = 'month', monthFilter = '', yearFilter = '') {
+  if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  isLoading.set(true);
+  try {
+    const res = await fetchFromGAS<ProfitLossSummary>(PUBLIC_GAS_URL, 'getProfitLoss', { timeframe, monthFilter, yearFilter });
+    if (res.success && res.data) {
+      profitLoss.set(res.data);
+    }
+  } catch (e) {
+    console.error('[GAS API] Failed to load profit loss:', e);
   } finally {
     isLoading.set(false);
   }

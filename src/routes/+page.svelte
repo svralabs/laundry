@@ -115,10 +115,10 @@
     </div>
 
     <div
-      class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-4"
+      class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 gap-4"
     >
       {#if $isLoading}
-        {#each Array(6) as _}
+        {#each Array(8) as _}
           <StatCardSkeleton />
         {/each}
       {:else}
@@ -151,15 +151,30 @@
           iconColor="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60"
         />
         <StatCard
+          title="Omset Periode Pilihan"
+          value={formatRupiah($dashboardStats.pendapatanPeriod)}
+          subtitle="Omset {timeframeLabels[activeTimeframe]}"
+          trendUp={true}
+        />
+        <StatCard
+          title="Pengeluaran Periode Pilihan"
+          value={formatRupiah($dashboardStats.pengeluaranPeriod || 0)}
+          subtitle="Biaya {timeframeLabels[activeTimeframe]}"
+          icon={TrendingUp}
+          iconColor="text-rose-600 bg-rose-50 dark:bg-rose-950/60"
+        />
+        <StatCard
+          title="Laba / Rugi Bersih"
+          value={formatRupiah($dashboardStats.labaRugiPeriod || 0)}
+          subtitle={($dashboardStats.labaRugiPeriod || 0) >= 0 ? "LABA BERSIH" : "RUGI BERSIH"}
+          trendUp={($dashboardStats.labaRugiPeriod || 0) >= 0}
+          icon={DollarSign}
+          iconColor={($dashboardStats.labaRugiPeriod || 0) >= 0 ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60" : "text-rose-600 bg-rose-50 dark:bg-rose-950/60"}
+        />
+        <StatCard
           title="Omset Hari Ini"
           value={formatRupiah($dashboardStats.pendapatanHariIni)}
           subtitle="Total hari ini"
-        />
-        <StatCard
-          title="Omset Periode Pilihan"
-          value={formatRupiah($dashboardStats.pendapatanPeriod)}
-          subtitle="Total {timeframeLabels[activeTimeframe]}"
-          trendUp={true}
         />
       {/if}
     </div>
