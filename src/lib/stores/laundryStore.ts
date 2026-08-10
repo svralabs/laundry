@@ -263,9 +263,11 @@ export async function loadProfitLoss(timeframe: 'month' | 'year' = 'month', mont
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<ProfitLossSummary>(PUBLIC_GAS_URL, 'getProfitLoss', { timeframe, monthFilter, yearFilter });
-    if (res.success && res.data) {
+    const res = await fetchFromGAS<any>(PUBLIC_GAS_URL, 'getProfitLoss', { timeframe, monthFilter, yearFilter });
+    if (res && res.success && res.data) {
       profitLoss.set(res.data);
+    } else if (res && res.totalRevenue !== undefined) {
+      profitLoss.set(res as ProfitLossSummary);
     }
   } catch (e) {
     console.error('[GAS API] Failed to load profit loss:', e);

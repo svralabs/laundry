@@ -64,7 +64,10 @@ function handleApiAction(action, payload) {
     var timeframe   = (payload && payload.timeframe)   ? payload.timeframe   : 'month';
     var monthFilter = (payload && payload.monthFilter) ? payload.monthFilter : undefined;
     var yearFilter  = (payload && payload.yearFilter)  ? payload.yearFilter  : undefined;
-    return getProfitLossData(timeframe, monthFilter, yearFilter);
+    return { success: true, data: getProfitLossData(timeframe, monthFilter, yearFilter) };
+  }
+  if (action === 'seedDummyData') {
+    return { success: true, message: seedDummyData() };
   }
 
   // ── READ — cached master data ──────────────
