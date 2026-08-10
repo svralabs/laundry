@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/stores";
-  import { settings, stats, statusSummary } from "$stores/laundryStore";
+  import { settings, stats, statusSummary, loadStatusSummary } from "$stores/laundryStore";
+  import { onMount } from "svelte";
   import {
     LayoutDashboard,
     Users,
@@ -14,6 +15,10 @@
   } from "lucide-svelte";
 
   export let mobileOpen = false;
+
+  onMount(() => {
+    loadStatusSummary();
+  });
 
   const menuItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard, badge: null },

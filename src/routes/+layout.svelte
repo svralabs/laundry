@@ -4,8 +4,15 @@
   import Navbar from '$components/Navbar.svelte';
   import Toast from '$components/Toast.svelte';
   import CapacityAlert from '$components/CapacityAlert.svelte';
+  import { onMount } from 'svelte';
+  import { loadDataFromGAS, loadStatusSummary } from '$stores/laundryStore';
 
   let mobileOpen = false;
+
+  onMount(() => {
+    loadDataFromGAS();
+    loadStatusSummary();
+  });
 </script>
 
 <div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row font-sans relative">
