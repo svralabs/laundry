@@ -190,25 +190,87 @@ export async function loadStatusSummary() {
   }
 }
 
+// Client-Side Buffer Caching for Pagination
+interface BufferState<T> {
+  key: string;
+  data: T[];
+  serverTotal: number;
+  serverTotalPages: number;
+}
+
+let ordersBuffer: BufferState<Order> | null = null;
+let customersBuffer: BufferState<Customer> | null = null;
+let expensesBuffer: BufferState<Expense> | null = null;
+
+export function clearClientBuffers() {
+  ordersBuffer = null;
+  customersBuffer = null;
+  expensesBuffer = null;
+}
+
 export async function loadCustomers(page = 1, pageSize = 10, q = '', sortKey?: string, sortDir?: string) {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  const filterKey = `${q}_${sortKey || ''}_${sortDir || ''}`;
+
+  const startIdx = (page - 1) * pageSize;
+  const endIdx = startIdx + pageSize;
+
+  if (
+    customersBuffer &&
+    customersBuffer.key === filterKey &&
+    (customersBuffer.data.length >= endIdx || customersBuffer.data.length === customersBuffer.serverTotal)
+  ) {
+    const sliced = customersBuffer.data.slice(startIdx, endIdx);
+    customers.set(sliced);
+    paginationState.set({
+      page,
+      pageSize,
+      total: customersBuffer.serverTotal,
+      totalPages: Math.ceil(customersBuffer.serverTotal / pageSize) || 1,
+      from: customersBuffer.serverTotal === 0 ? 0 : startIdx + 1,
+      to: Math.min(endIdx, customersBuffer.serverTotal),
+      isLoadingMore: false,
+      hasMore: endIdx < customersBuffer.serverTotal
+    });
+    return;
+  }
+
+  const chunkSize = 50;
+  const chunkPage = Math.floor(startIdx / chunkSize) + 1;
+
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page, pageSize, q, sortKey, sortDir });
+    const res = await fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page: chunkPage, pageSize: chunkSize, q, sortKey, sortDir });
     if (res.success && Array.isArray(res.data)) {
-      customers.set(res.data);
-      if (res.meta) {
-        paginationState.set({
-          page: res.meta.page || page,
-          pageSize: res.meta.pageSize || pageSize,
-          total: res.meta.total || 0,
-          totalPages: res.meta.totalPages || 1,
-          from: res.meta.from || 0,
-          to: res.meta.to || 0,
-          isLoadingMore: false,
-          hasMore: false
-        });
+      const serverTotal = res.meta?.total || res.data.length;
+      const serverTotalPages = Math.ceil(serverTotal / pageSize) || 1;
+
+      if (!customersBuffer || customersBuffer.key !== filterKey || chunkPage === 1) {
+        customersBuffer = {
+          key: filterKey,
+          data: res.data,
+          serverTotal,
+          serverTotalPages
+        };
+      } else {
+        customersBuffer.data = [...customersBuffer.data, ...res.data];
+        customersBuffer.serverTotal = serverTotal;
+        customersBuffer.serverTotalPages = serverTotalPages;
       }
+
+      const sliced = customersBuffer.data.slice(startIdx, endIdx);
+      customers.set(sliced);
+
+      paginationState.set({
+        page,
+        pageSize,
+        total: serverTotal,
+        totalPages: serverTotalPages,
+        from: serverTotal === 0 ? 0 : startIdx + 1,
+        to: Math.min(endIdx, serverTotal),
+        isLoadingMore: false,
+        hasMore: endIdx < serverTotal
+      });
     }
   } catch (e) {
     console.error('[GAS API] Failed to load customers:', e);
@@ -220,23 +282,67 @@ export async function loadCustomers(page = 1, pageSize = 10, q = '', sortKey?: s
 export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe?: TimeframeFilter, sortKey?: string, sortDir?: string) {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   const tf = timeframe || get(timeframeFilter) || 'all';
+  const filterKey = `${statusFilter}_${yearFilter}_${q}_${tf}_${sortKey || ''}_${sortDir || ''}`;
+
+  const startIdx = (page - 1) * pageSize;
+  const endIdx = startIdx + pageSize;
+
+  if (
+    ordersBuffer &&
+    ordersBuffer.key === filterKey &&
+    (ordersBuffer.data.length >= endIdx || ordersBuffer.data.length === ordersBuffer.serverTotal)
+  ) {
+    const sliced = ordersBuffer.data.slice(startIdx, endIdx);
+    orders.set(sliced);
+    paginationState.set({
+      page,
+      pageSize,
+      total: ordersBuffer.serverTotal,
+      totalPages: Math.ceil(ordersBuffer.serverTotal / pageSize) || 1,
+      from: ordersBuffer.serverTotal === 0 ? 0 : startIdx + 1,
+      to: Math.min(endIdx, ordersBuffer.serverTotal),
+      isLoadingMore: false,
+      hasMore: endIdx < ordersBuffer.serverTotal
+    });
+    return;
+  }
+
+  const chunkSize = 50;
+  const chunkPage = Math.floor(startIdx / chunkSize) + 1;
+
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, statusFilter, yearFilter, q, timeframe: tf, sortKey, sortDir });
+    const res = await fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page: chunkPage, pageSize: chunkSize, statusFilter, yearFilter, q, timeframe: tf, sortKey, sortDir });
     if (res.success && Array.isArray(res.data)) {
-      orders.set(res.data);
-      if (res.meta) {
-        paginationState.set({
-          page: res.meta.page || page,
-          pageSize: res.meta.pageSize || pageSize,
-          total: res.meta.total || 0,
-          totalPages: res.meta.totalPages || 1,
-          from: res.meta.from || 0,
-          to: res.meta.to || 0,
-          isLoadingMore: false,
-          hasMore: false
-        });
+      const serverTotal = res.meta?.total || res.data.length;
+      const serverTotalPages = Math.ceil(serverTotal / pageSize) || 1;
+
+      if (!ordersBuffer || ordersBuffer.key !== filterKey || chunkPage === 1) {
+        ordersBuffer = {
+          key: filterKey,
+          data: res.data,
+          serverTotal,
+          serverTotalPages
+        };
+      } else {
+        ordersBuffer.data = [...ordersBuffer.data, ...res.data];
+        ordersBuffer.serverTotal = serverTotal;
+        ordersBuffer.serverTotalPages = serverTotalPages;
       }
+
+      const sliced = ordersBuffer.data.slice(startIdx, endIdx);
+      orders.set(sliced);
+
+      paginationState.set({
+        page,
+        pageSize,
+        total: serverTotal,
+        totalPages: serverTotalPages,
+        from: serverTotal === 0 ? 0 : startIdx + 1,
+        to: Math.min(endIdx, serverTotal),
+        isLoadingMore: false,
+        hasMore: endIdx < serverTotal
+      });
     }
   } catch (e) {
     console.error('[GAS API] Failed to load orders:', e);
@@ -248,26 +354,71 @@ export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua'
 export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe?: TimeframeFilter, sortKey?: string, sortDir?: string) {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   const tf = timeframe || get(timeframeFilter) || 'all';
+  const filterKey = `${categoryFilter}_${yearFilter}_${q}_${tf}_${sortKey || ''}_${sortDir || ''}`;
+
+  const startIdx = (page - 1) * pageSize;
+  const endIdx = startIdx + pageSize;
+
+  if (
+    expensesBuffer &&
+    expensesBuffer.key === filterKey &&
+    (expensesBuffer.data.length >= endIdx || expensesBuffer.data.length === expensesBuffer.serverTotal)
+  ) {
+    const sliced = expensesBuffer.data.slice(startIdx, endIdx);
+    expenses.set(sliced);
+    paginationState.set({
+      page,
+      pageSize,
+      total: expensesBuffer.serverTotal,
+      totalPages: Math.ceil(expensesBuffer.serverTotal / pageSize) || 1,
+      from: expensesBuffer.serverTotal === 0 ? 0 : startIdx + 1,
+      to: Math.min(endIdx, expensesBuffer.serverTotal),
+      isLoadingMore: false,
+      hasMore: endIdx < expensesBuffer.serverTotal
+    });
+    return;
+  }
+
+  const chunkSize = 50;
+  const chunkPage = Math.floor(startIdx / chunkSize) + 1;
+
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Expense[]>(PUBLIC_GAS_URL, 'getExpenses', { page, pageSize, categoryFilter, yearFilter, q, timeframe: tf, sortKey, sortDir });
+    const res = await fetchFromGAS<Expense[]>(PUBLIC_GAS_URL, 'getExpenses', { page: chunkPage, pageSize: chunkSize, categoryFilter, yearFilter, q, timeframe: tf, sortKey, sortDir });
     if (res.success && Array.isArray(res.data)) {
-      expenses.set(res.data);
-      if (res.meta) {
-        paginationState.set({
-          page: res.meta.page || page,
-          pageSize: res.meta.pageSize || pageSize,
-          total: res.meta.total || 0,
-          totalPages: res.meta.totalPages || 1,
-          from: res.meta.from || 0,
-          to: res.meta.to || 0,
-          isLoadingMore: false,
-          hasMore: false
-        });
+      const serverTotal = res.meta?.total || res.data.length;
+      const serverTotalPages = Math.ceil(serverTotal / pageSize) || 1;
+
+      if (!expensesBuffer || expensesBuffer.key !== filterKey || chunkPage === 1) {
+        expensesBuffer = {
+          key: filterKey,
+          data: res.data,
+          serverTotal,
+          serverTotalPages
+        };
+      } else {
+        expensesBuffer.data = [...expensesBuffer.data, ...res.data];
+        expensesBuffer.serverTotal = serverTotal;
+        expensesBuffer.serverTotalPages = serverTotalPages;
       }
+
+      const sliced = expensesBuffer.data.slice(startIdx, endIdx);
+      expenses.set(sliced);
+
       if (res.summary) {
         expensesSummary.set(res.summary);
       }
+
+      paginationState.set({
+        page,
+        pageSize,
+        total: serverTotal,
+        totalPages: serverTotalPages,
+        from: serverTotal === 0 ? 0 : startIdx + 1,
+        to: Math.min(endIdx, serverTotal),
+        isLoadingMore: false,
+        hasMore: endIdx < serverTotal
+      });
     }
   } catch (e) {
     console.error('[GAS API] Failed to load expenses:', e);
