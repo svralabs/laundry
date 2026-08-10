@@ -142,22 +142,26 @@ function handleApiAction(action, payload) {
 // ─────────────────────────────────────────────
 
 function doGet(e) {
-  var action     = e && e.parameter ? e.parameter.action     : '';
-  var payloadStr = e && e.parameter ? e.parameter.payload    : '';
-  var page       = e && e.parameter ? e.parameter.page       : undefined;
-  var pageSize   = e && e.parameter ? e.parameter.pageSize   : undefined;
-  var q          = e && e.parameter ? e.parameter.q          : undefined;
+  var action       = e && e.parameter ? e.parameter.action       : '';
+  var payloadStr   = e && e.parameter ? e.parameter.payload      : '';
+  var page         = e && e.parameter ? e.parameter.page         : undefined;
+  var pageSize     = e && e.parameter ? e.parameter.pageSize     : undefined;
+  var q            = e && e.parameter ? e.parameter.q            : undefined;
+  var statusFilter = e && e.parameter ? e.parameter.statusFilter : undefined;
+  var yearFilter   = e && e.parameter ? e.parameter.yearFilter   : undefined;
 
   var payload = null;
   if (payloadStr) {
     try { payload = JSON.parse(payloadStr); } catch(err) { payload = payloadStr; }
   }
-  // Merge pagination params ke payload supaya bisa dipakai handleApiAction
-  if (page || pageSize || q) {
+  // Merge pagination & filter params ke payload supaya bisa dipakai handleApiAction
+  if (page || pageSize || q || statusFilter || yearFilter) {
     payload = payload || {};
-    if (page)     payload.page     = page;
-    if (pageSize) payload.pageSize = pageSize;
-    if (q)        payload.q        = q;
+    if (page)         payload.page         = page;
+    if (pageSize)     payload.pageSize     = pageSize;
+    if (q)            payload.q            = q;
+    if (statusFilter) payload.statusFilter = statusFilter;
+    if (yearFilter)   payload.yearFilter   = yearFilter;
   }
 
   var result;
@@ -263,17 +267,22 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter) {
     }
   }
 
-  if (statusFilter || yearFilter) {
+  if ((statusFilter && statusFilter !== 'Semua') || (yearFilter && yearFilter !== 'Semua')) {
     var filtered = [];
     var statusColIdx = headers.indexOf('status');
     var tanggalColIdx = headers.indexOf('tanggal');
 
+    var statusVals = (statusColIdx !== -1) ? sheet.getRange(2, statusColIdx + 1, lastRow - 1, 1).getValues() : null;
+    var tanggalVals = (tanggalColIdx !== -1) ? sheet.getRange(2, tanggalColIdx + 1, lastRow - 1, 1).getValues() : null;
+
     for (var i = 0; i < matchingRowIndices.length; i++) {
       var rowNum = matchingRowIndices[i];
-      var rowVals = sheet.getRange(rowNum, 1, 1, numCols).getValues()[0];
-      
-      var matchesStatus = !statusFilter || statusFilter === 'Semua' || rowVals[statusColIdx] === statusFilter;
-      var tVal = rowVals[tanggalColIdx];
+      var arrayIdx = rowNum - 2;
+
+      var stVal = statusVals ? statusVals[arrayIdx][0] : '';
+      var matchesStatus = !statusFilter || statusFilter === 'Semua' || stVal === statusFilter;
+
+      var tVal = tanggalVals ? tanggalVals[arrayIdx][0] : '';
       if (tVal instanceof Date) tVal = tVal.toISOString().slice(0, 10);
       else tVal = tVal ? tVal.toString().slice(0, 10) : '';
 
