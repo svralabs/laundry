@@ -121,7 +121,7 @@ export async function loadDataFromGAS(page = 1, pageSize = 50, append = false, q
       }
       
       const meta = ordRes.value.meta;
-      if (meta) {
+      if (meta && meta.page !== undefined && meta.pageSize !== undefined && meta.total !== undefined && meta.totalPages !== undefined) {
         paginationState.set({
           page: meta.page,
           pageSize: meta.pageSize,

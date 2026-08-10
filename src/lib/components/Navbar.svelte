@@ -56,25 +56,32 @@
     </button>
 
     <!-- Laundry Name & Date -->
-    <div class="hidden sm:block">
-      <h2
-        class="text-base font-extrabold text-slate-800 dark:text-white tracking-tight flex items-center gap-2"
-      >
-        {$settings.nama_laundry || "SVRA Laundry"}
-        {#if publicGasUrl}
-          <span
-            class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-          >
-            <CheckCircle2 class="w-3 h-3" /> GAS Cloud Live
-          </span>
-        {/if}
-      </h2>
-      <p
-        class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium mt-0.5"
-      >
-        <Calendar class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-        {todayFormatted}
-      </p>
+    <div class="hidden sm:flex items-center gap-3">
+      <img
+        src="/logo.png"
+        alt="SVRA Laundry Logo"
+        class="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200 dark:border-slate-800"
+      />
+      <div>
+        <h2
+          class="text-base font-extrabold text-slate-800 dark:text-white tracking-tight flex items-center gap-2"
+        >
+          {$settings.nama_laundry || "SVRA Laundry"}
+          {#if publicGasUrl}
+            <span
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+            >
+              <CheckCircle2 class="w-3 h-3" /> GAS Cloud Live
+            </span>
+          {/if}
+        </h2>
+        <p
+          class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium mt-0.5"
+        >
+          <Calendar class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+          {todayFormatted}
+        </p>
+      </div>
     </div>
   </div>
 
@@ -99,7 +106,7 @@
     {#if publicGasUrl}
       <button
         type="button"
-        on:click={loadDataFromGAS}
+        on:click={() => loadDataFromGAS()}
         disabled={$isLoading}
         class="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition relative"
         title="Sync Spreadsheet"

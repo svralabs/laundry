@@ -49,11 +49,11 @@
       class="h-20 px-6 flex items-center justify-between border-b border-blue-600/60 dark:border-slate-800"
     >
       <a href="/" class="flex items-center gap-3 group">
-        <div
-          class="w-9 h-9 rounded-xl bg-white/10 dark:bg-blue-600 flex items-center justify-center text-white shadow-inner group-hover:scale-105 transition-transform"
-        >
-          <Shirt class="w-5 h-5 text-white" />
-        </div>
+        <img
+          src="/logo.png"
+          alt="SVRA Laundry Logo"
+          class="w-10 h-10 rounded-xl object-cover shadow-md group-hover:scale-105 transition-transform"
+        />
         <div class="overflow-hidden">
           <h1
             class="font-extrabold text-base tracking-tight text-white leading-snug truncate"
