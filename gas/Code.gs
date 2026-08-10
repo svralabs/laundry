@@ -65,6 +65,22 @@ function handleApiAction(action, payload) {
     var timeframe = (payload && payload.timeframe) ? payload.timeframe : 'today';
     return { success: true, data: getDashboardStatsData(timeframe) };
   }
+  if (action === 'getDashboardBatch') {
+    var timeframe = (payload && payload.timeframe) ? payload.timeframe : 'today';
+    var stats = getDashboardStatsData(timeframe);
+    var recentOrdersRes = getPagedOrders(1, 5, '', 'Semua', 'Semua', timeframe, 'invoice', 'desc');
+    var statusSummary = getStatusSummaryData();
+
+    return {
+      success: true,
+      data: {
+        stats: stats,
+        recentOrders: recentOrdersRes ? recentOrdersRes.data : [],
+        recentOrdersMeta: recentOrdersRes ? recentOrdersRes.meta : null,
+        statusSummary: statusSummary
+      }
+    };
+  }
   if (action === 'getStatusSummary') {
     return { success: true, data: getStatusSummaryData() };
   }

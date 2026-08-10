@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dashboardStats, loadDashboardStats, loadOrders, orders, isLoading, timeframeFilter, type TimeframeFilter } from "$stores/laundryStore";
+  import { dashboardStats, loadDashboardBatch, orders, isLoading, timeframeFilter, type TimeframeFilter } from "$stores/laundryStore";
   import StatCard from "$components/StatCard.svelte";
   import StatusBadge from "$components/StatusBadge.svelte";
   import StepProgress from "$components/StepProgress.svelte";
@@ -26,7 +26,7 @@
   $: activeTimeframe = $timeframeFilter;
 
   $: {
-    loadDashboardStats(activeTimeframe);
+    loadDashboardBatch(activeTimeframe);
   }
 
   let sortKey = 'invoice';
@@ -50,7 +50,7 @@
   };
 
   onMount(() => {
-    loadOrders(1, 5);
+    // Handled by loadDashboardBatch reactive block
   });
 
   $: chartItems = $dashboardStats.chartData || [];

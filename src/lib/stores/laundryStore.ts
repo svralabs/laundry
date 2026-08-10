@@ -131,6 +131,37 @@ export const stats = derived([orders, customers], ([$orders, $customers]) => {
   };
 });
 
+export interface DashboardBatchData {
+  stats: DashboardStatsData;
+  recentOrders: Order[];
+  recentOrdersMeta?: any;
+  statusSummary: StatusSummaryData;
+}
+
+export async function loadDashboardBatch(timeframe?: TimeframeFilter) {
+  if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  const tf = timeframe || get(timeframeFilter) || 'today';
+  isLoading.set(true);
+  try {
+    const res = await fetchFromGAS<DashboardBatchData>(PUBLIC_GAS_URL, 'getDashboardBatch', { timeframe: tf });
+    if (res.success && res.data) {
+      if (res.data.stats) {
+        dashboardStats.set(res.data.stats);
+      }
+      if (Array.isArray(res.data.recentOrders)) {
+        orders.set(res.data.recentOrders);
+      }
+      if (res.data.statusSummary) {
+        statusSummary.set(res.data.statusSummary);
+      }
+    }
+  } catch (e) {
+    console.error('[GAS API] Failed to load dashboard batch:', e);
+  } finally {
+    isLoading.set(false);
+  }
+}
+
 export async function loadDashboardStats(timeframe?: TimeframeFilter) {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   const tf = timeframe || get(timeframeFilter) || 'today';
