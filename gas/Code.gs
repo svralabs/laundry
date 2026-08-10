@@ -472,7 +472,7 @@ function getDashboardStatsData(timeframe) {
 }
 
 function getStatusSummaryData() {
-  return getCachedData('status_summary_metrics', function() {
+  return getCachedData('status_summary_metrics_v2', function() {
     var sheet = getOrCreateSheet('orders');
     var lastRow = sheet.getLastRow();
     
