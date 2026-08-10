@@ -555,3 +555,124 @@ function checkAndSendCapacityAlert(capacity) {
     Logger.log('Gagal mengirim email notifikasi: ' + e.toString());
   }
 }
+
+// ─────────────────────────────────────────────
+// SEED DATA DUMMY (TESTING PERFORMA DEMO)
+// ─────────────────────────────────────────────
+
+/**
+ * Script untuk generate data dummy (ratusan row) langsung ke Sheet
+ * Menggunakan batch write (setValues) agar super cepat dan hemat kuota Apps Script.
+ */
+function seedDummyData() {
+  var NUM_CUSTOMERS = 50; // Jumlah customer dummy (dapat diubah)
+  var NUM_ORDERS = 300;   // Jumlah order dummy (dapat diubah)
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // ── 1. SEED CUSTOMERS ──────────────────────
+  var customerSheet = ss.getSheetByName('customers');
+  if (!customerSheet) {
+    customerSheet = ss.insertSheet('customers');
+    customerSheet.appendRow(['id', 'nama', 'hp', 'alamat', 'created_at']);
+  }
+
+  var customerRows = [];
+  var customerIds = [];
+  var customerNames = [];
+  var customerHps = [];
+
+  for (var c = 1; c <= NUM_CUSTOMERS; c++) {
+    var cId = 'CUST-DEMO-' + ('000' + c).slice(-3);
+    var cName = 'Pelanggan Test ' + c;
+    var cHp = '0812000' + ('0000' + c).slice(-4);
+    var cAlamat = 'Jl. Demo Testing No. ' + c + ', Jakarta';
+    var cCreated = new Date(Date.now() - Math.floor(Math.random() * 30) * 86400000).toISOString().slice(0, 10);
+
+    customerIds.push(cId);
+    customerNames.push(cName);
+    customerHps.push(cHp);
+
+    customerRows.push([cId, cName, cHp, cAlamat, cCreated]);
+  }
+
+  if (customerRows.length > 0) {
+    var lastCustRow = customerSheet.getLastRow();
+    customerSheet.getRange(lastCustRow + 1, 1, customerRows.length, 5).setValues(customerRows);
+  }
+
+  // ── 2. SEED ORDERS ────────────────────────
+  var orderSheet = ss.getSheetByName('orders');
+  if (!orderSheet) {
+    orderSheet = ss.insertSheet('orders');
+    orderSheet.appendRow(['id', 'invoice', 'tanggal', 'customer_id', 'customer_nama', 'customer_hp', 'service_id', 'service_nama', 'berat', 'harga', 'subtotal', 'diskon', 'total', 'status', 'estimasi', 'catatan', 'created_at', 'updated_at']);
+  }
+
+  var statuses = ['Masuk', 'Dicuci', 'Disetrika', 'Selesai', 'Diambil'];
+  var servicesList = [
+    { id: 'SRV-001', nama: 'Cuci Komplit Reguler', harga: 8000 },
+    { id: 'SRV-002', nama: 'Cuci Kering Lipat', harga: 6000 },
+    { id: 'SRV-003', nama: 'Setrika Express 1 Hari', harga: 10000 },
+    { id: 'SRV-004', nama: 'Cuci Bed Cover Jumbo', harga: 35000 }
+  ];
+
+  var orderRows = [];
+  var startDate = new Date();
+  startDate.setDate(startDate.getDate() - 60);
+
+  for (var o = 1; o <= NUM_ORDERS; o++) {
+    var oId = 'ORD-DEMO-' + ('0000' + o).slice(-4);
+    var inv = 'INV/DEMO/' + ('0000' + o).slice(-4);
+    
+    var custIdx = Math.floor(Math.random() * NUM_CUSTOMERS);
+    var srvIdx = Math.floor(Math.random() * servicesList.length);
+    var srv = servicesList[srvIdx];
+
+    var randomDays = Math.floor(Math.random() * 60);
+    var ordDateObj = new Date(startDate.getTime() + randomDays * 86400000);
+    var ordDate = ordDateObj.toISOString().slice(0, 10);
+    var ordTime = ordDate + ' 10:00';
+
+    var berat = Math.floor(Math.random() * 8) + 1;
+    var harga = srv.harga;
+    var subtotal = berat * harga;
+    var diskon = (o % 5 === 0) ? 5000 : 0;
+    var total = Math.max(0, subtotal - diskon);
+    var status = statuses[Math.floor(Math.random() * statuses.length)];
+
+    var estDate = new Date(ordDateObj.getTime() + 2 * 86400000).toISOString().slice(0, 10);
+    var catatan = (o % 3 === 0) ? 'Pakaian wangi lavender' : '';
+
+    orderRows.push([
+      oId,
+      inv,
+      ordDate,
+      customerIds[custIdx],
+      customerNames[custIdx],
+      customerHps[custIdx],
+      srv.id,
+      srv.nama,
+      berat,
+      harga,
+      subtotal,
+      diskon,
+      total,
+      status,
+      estDate,
+      catatan,
+      ordTime,
+      ordTime
+    ]);
+  }
+
+  if (orderRows.length > 0) {
+    var lastOrdRow = orderSheet.getLastRow();
+    orderSheet.getRange(lastOrdRow + 1, 1, orderRows.length, 18).setValues(orderRows);
+  }
+
+  try {
+    CacheService.getScriptCache().remove('capacity_metrics');
+  } catch(e) {}
+
+  Logger.log('BERHASIL GENERATE: ' + NUM_CUSTOMERS + ' Customers & ' + NUM_ORDERS + ' Orders!');
+}
