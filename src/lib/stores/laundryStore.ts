@@ -4,8 +4,8 @@ import { generateInvoiceNumber } from '$utils/formatters';
 import { fetchFromGAS, postToGAS } from '$services/api';
 import { env } from '$env/dynamic/public'; // Using dynamic to ensure it reads from process.env on server if needed, or static
 
-// Fallback to empty if not configured in .env
-const PUBLIC_GAS_URL = env.PUBLIC_GAS_URL || '';
+// Fallback to active deployed GAS URL if not configured in .env
+const PUBLIC_GAS_URL = env.PUBLIC_GAS_URL || 'https://script.google.com/macros/s/AKfycbyLccmrftjbSQotaxEPf3AvcR3zTrMEe6sla8PNEi1Gdqo4vxVfFhU-UFtb3duQGKU-Lg/exec';
 
 const DEFAULT_SETTINGS: Settings = {
   nama_laundry: 'SVRA Laundry',
