@@ -1,5 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
-import type { Customer, Order, Service, Settings, OrderStatus, ToastMessage } from '$types/laundry';
+import type { Customer, Order, Service, Settings, OrderStatus, ToastMessage, CapacityStatus } from '$types/laundry';
 import { generateInvoiceNumber } from '$utils/formatters';
 import { fetchFromGAS, postToGAS } from '$services/api';
 import { env } from '$env/dynamic/public'; // Using dynamic to ensure it reads from process.env on server if needed, or static
@@ -24,6 +24,7 @@ export const settings = writable<Settings>(DEFAULT_SETTINGS);
 export const toasts = writable<ToastMessage[]>([]);
 export const isLoading = writable<boolean>(false);
 export const globalSearch = writable<string>('');
+export const capacityStatus = writable<CapacityStatus | null>(null);
 
 export const paginationState = writable({
   page: 1,
@@ -131,8 +132,13 @@ export async function loadDataFromGAS(page = 1, pageSize = 50, append = false, q
         });
       }
     }
-    if (setRes.status === 'fulfilled' && setRes.value.success && Array.isArray(setRes.value.data) && setRes.value.data.length > 0) {
-      settings.set(setRes.value.data[0]);
+    if (setRes.status === 'fulfilled' && setRes.value.success) {
+      if (Array.isArray(setRes.value.data) && setRes.value.data.length > 0) {
+        settings.set(setRes.value.data[0]);
+      }
+      if (setRes.value.meta && setRes.value.meta.capacity) {
+        capacityStatus.set(setRes.value.meta.capacity);
+      }
     }
   } catch (err: any) {
     console.error('[GAS API] Error loading data:', err);
@@ -231,7 +237,15 @@ export function addCustomer(cust: Omit<Customer, 'id' | 'created_at'>) {
   addToast('Berhasil', `Pelanggan ${cust.nama} berhasil ditambahkan!`, 'success');
 
   if (PUBLIC_GAS_URL) {
-    postToGAS(PUBLIC_GAS_URL, 'addCustomer', newCust).catch(console.error);
+    postToGAS(PUBLIC_GAS_URL, 'addCustomer', newCust).catch((err: any) => {
+      if (err.message && err.message.includes('CAPACITY_FULL')) {
+        customers.update((all) => all.filter(c => c.id !== id));
+        removeToast('Berhasil');
+        addToast('Gagal: Kapasitas Penuh', 'Sistem sedang dalam proses pemeliharaan kapasitas (Database Penuh). Mohon hubungi admin.', 'error', 8000);
+      } else {
+        console.error(err);
+      }
+    });
   }
   return newCust;
 }
@@ -274,7 +288,15 @@ export function createOrder(orderInput: Omit<Order, 'id' | 'invoice' | 'created_
   addToast('Order Berhasil', `Nota ${invoice} telah dibuat. Status: ${newOrder.status}`, 'success');
 
   if (PUBLIC_GAS_URL) {
-    postToGAS(PUBLIC_GAS_URL, 'addOrder', newOrder).catch(console.error);
+    postToGAS(PUBLIC_GAS_URL, 'addOrder', newOrder).catch((err: any) => {
+      if (err.message && err.message.includes('CAPACITY_FULL')) {
+        orders.update((all) => all.filter(o => o.id !== id));
+        removeToast('Order Berhasil');
+        addToast('Gagal: Kapasitas Penuh', 'Sistem sedang dalam proses pemeliharaan kapasitas (Database Penuh). Mohon hubungi admin.', 'error', 8000);
+      } else {
+        console.error(err);
+      }
+    });
   }
 
   return newOrder;

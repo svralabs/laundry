@@ -3,11 +3,14 @@
   import Sidebar from '$components/Sidebar.svelte';
   import Navbar from '$components/Navbar.svelte';
   import Toast from '$components/Toast.svelte';
+  import CapacityAlert from '$components/CapacityAlert.svelte';
 
   let mobileOpen = false;
 </script>
 
-<div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row font-sans">
+<div class="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 flex flex-col lg:flex-row font-sans relative">
+  <CapacityAlert />
+  
   <!-- Toast Overlay -->
   <Toast />
 

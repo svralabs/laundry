@@ -44,7 +44,18 @@ function handleApiAction(action, payload) {
     return { success: true, data: getCachedData('services', function() { return getSheetData('services'); }, 21600) };
   }
   if (action === 'getSettings') {
-    return { success: true, data: getCachedData('settings', function() { return getSheetData('settings'); }, 21600) };
+    var data = getCachedData('settings', function() { return getSheetData('settings'); }, 21600);
+    var capacity = calculateCapacity();
+    checkAndSendCapacityAlert(capacity);
+    return { success: true, data: data, meta: { capacity: capacity } };
+  }
+
+  // ── WRITE — system ────────────────────────
+  if (action === 'resetCapacityAlert') {
+    var props = PropertiesService.getScriptProperties();
+    props.deleteProperty('LAST_ALERT_DATE');
+    props.deleteProperty('LAST_ALERT_LEVEL');
+    return { success: true, message: 'Kapasitas alert berhasil di-reset.' };
   }
 
   // ── WRITE — customers ──────────────────────
@@ -354,6 +365,12 @@ function getSheetData(sheetName) {
  * sheet.appendRow() dipanggil 1 kali saja (sudah atomic untuk satu baris).
  */
 function appendSheetRow(sheetName, item) {
+  // Pengecekan kapasitas mentok
+  var capacity = calculateCapacity();
+  if (capacity.percentage >= 99.5) {
+    throw new Error('CAPACITY_FULL: Kapasitas penyimpanan database penuh.');
+  }
+
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
@@ -472,5 +489,69 @@ function updateSettingsRow(updateObj) {
     }
   } finally {
     lock.releaseLock();
+  }
+}
+
+// ─────────────────────────────────────────────
+// CAPACITY MONITORING SYSTEM
+// ─────────────────────────────────────────────
+
+function calculateCapacity() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  var totalCells = 0;
+  
+  for (var i = 0; i < sheets.length; i++) {
+    totalCells += sheets[i].getMaxRows() * sheets[i].getMaxColumns();
+  }
+  
+  var MAX_CELLS = 10000000; // Hard limit Google Sheets = 10 Juta Sel
+  var percentage = (totalCells / MAX_CELLS) * 100;
+  
+  var level = 'NORMAL';
+  if (percentage >= 95) level = 'CRITICAL';
+  else if (percentage >= 85) level = 'WARNING';
+  else if (percentage >= 70) level = 'INFO';
+  
+  return {
+    totalCells: totalCells,
+    percentage: parseFloat(percentage.toFixed(2)),
+    level: level
+  };
+}
+
+function checkAndSendCapacityAlert(capacity) {
+  var props = PropertiesService.getScriptProperties();
+  var lastAlertDate = props.getProperty('LAST_ALERT_DATE');
+  var lastAlertLevel = props.getProperty('LAST_ALERT_LEVEL');
+  var today = new Date().toISOString().slice(0, 10);
+  
+  // Jika masih normal, tidak perlu lakukan apa-apa
+  if (capacity.level === 'NORMAL') return;
+  
+  // Anti-spam: Hanya kirim 1x sehari untuk level yang sama
+  if (lastAlertDate === today && lastAlertLevel === capacity.level) return;
+  
+  // Simpan state terakhir
+  props.setProperty('LAST_ALERT_DATE', today);
+  props.setProperty('LAST_ALERT_LEVEL', capacity.level);
+  
+  // Siapkan email admin
+  var adminEmail = Session.getEffectiveUser().getEmail();
+  var ssUrl = SpreadsheetApp.getActiveSpreadsheet().getUrl();
+  var ssName = SpreadsheetApp.getActiveSpreadsheet().getName();
+  
+  var subject = '[LAUNDRY ALERT - ' + capacity.level + '] Kapasitas Penyimpanan (' + capacity.percentage + '%)';
+  var body = 'Perhatian Admin,\n\n' +
+             'Spreadsheet "' + ssName + '" saat ini telah mencapai kapasitas ' + capacity.percentage + '%.\n' +
+             'Total Sel Terpakai: ' + capacity.totalCells + ' / 10.000.000 sel.\n\n' +
+             'Level: ' + capacity.level + '\n\n' +
+             'Silakan segera lakukan migrasi (Upgrade) dan pindahkan data ke Spreadsheet baru sebelum mentok 100%.\n\n' +
+             'Akses Spreadsheet: ' + ssUrl;
+             
+  try {
+    MailApp.sendEmail(adminEmail, subject, body);
+  } catch(e) {
+    Logger.log('Gagal mengirim email notifikasi: ' + e.toString());
   }
 }

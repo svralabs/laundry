@@ -52,12 +52,19 @@ export interface APIResponse<T = any> {
   message?: string;
   data?: T;
   meta?: {
-    total: number;
-    page: number;
-    pageSize: number;
-    totalPages: number;
+    total?: number;
+    page?: number;
+    pageSize?: number;
+    totalPages?: number;
+    capacity?: CapacityStatus;
   };
   error?: string;
+}
+
+export interface CapacityStatus {
+  totalCells: number;
+  percentage: number;
+  level: 'NORMAL' | 'INFO' | 'WARNING' | 'CRITICAL';
 }
 
 export interface ToastMessage {
