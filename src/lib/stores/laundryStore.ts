@@ -1,5 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
-import type { Customer, Order, Service, Settings, OrderStatus, ToastMessage, CapacityStatus, DashboardStatsData, StatusSummaryData, Expense, ProfitLossSummary } from '$types/laundry';
+import type { Customer, Order, Service, Settings, OrderStatus, ToastMessage, CapacityStatus, DashboardStatsData, StatusSummaryData, Expense, ExpensesSummary, ProfitLossSummary } from '$types/laundry';
 import { generateInvoiceNumber } from '$utils/formatters';
 import { fetchFromGAS, postToGAS } from '$services/api';
 import { env } from '$env/dynamic/public'; // Using dynamic to ensure it reads from process.env on server if needed, or static
@@ -46,7 +46,13 @@ export const statusSummary = writable<StatusSummaryData>({
 });
 
 export const expenses = writable<Expense[]>([]);
-export const expensesSummary = writable({ totalExpensesThisMonth: 0, totalExpensesToday: 0 });
+export const expensesSummary = writable<ExpensesSummary>({
+  totalExpenses: 0,
+  byCategory: {},
+  totalCount: 0,
+  totalExpensesThisMonth: 0,
+  totalExpensesToday: 0
+});
 export const profitLoss = writable<ProfitLossSummary | null>(null);
 
 export const paginationState = writable({
@@ -112,6 +118,7 @@ export const stats = derived([orders, customers], ([$orders, $customers]) => {
 
 export async function loadDashboardStats(timeframe: 'today' | 'week' | 'month' | 'year' = 'today') {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  isLoading.set(true);
   try {
     const res = await fetchFromGAS<DashboardStatsData>(PUBLIC_GAS_URL, 'getDashboardStats', { timeframe });
     if (res.success && res.data) {
@@ -119,6 +126,8 @@ export async function loadDashboardStats(timeframe: 'today' | 'week' | 'month' |
     }
   } catch (e) {
     console.error('[GAS API] Failed to load dashboard stats:', e);
+  } finally {
+    isLoading.set(false);
   }
 }
 
@@ -161,11 +170,11 @@ export async function loadCustomers(page = 1, pageSize = 10, q = '') {
   }
 }
 
-export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua', yearFilter = 'Semua', q = '') {
+export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe = 'all') {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, statusFilter, yearFilter, q });
+    const res = await fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, statusFilter, yearFilter, q, timeframe });
     if (res.success && Array.isArray(res.data)) {
       orders.set(res.data);
       if (res.meta) {
@@ -188,11 +197,11 @@ export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua'
   }
 }
 
-export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Semua', yearFilter = 'Semua', q = '') {
+export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe = 'all') {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Expense[]>(PUBLIC_GAS_URL, 'getExpenses', { page, pageSize, categoryFilter, yearFilter, q });
+    const res = await fetchFromGAS<Expense[]>(PUBLIC_GAS_URL, 'getExpenses', { page, pageSize, categoryFilter, yearFilter, q, timeframe });
     if (res.success && Array.isArray(res.data)) {
       expenses.set(res.data);
       if (res.meta) {
@@ -259,7 +268,7 @@ export async function deleteExpense(id: string) {
   return false;
 }
 
-export async function loadProfitLoss(timeframe: 'month' | 'year' = 'month', monthFilter = '', yearFilter = '') {
+export async function loadProfitLoss(timeframe: 'today' | 'week' | 'month' | 'year' = 'month', monthFilter = '', yearFilter = '') {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   isLoading.set(true);
   try {

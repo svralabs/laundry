@@ -103,6 +103,14 @@ export interface Expense {
   created_at: string;
 }
 
+export interface ExpensesSummary {
+  totalExpenses?: number;
+  byCategory?: Record<string, number>;
+  totalCount?: number;
+  totalExpensesThisMonth?: number;
+  totalExpensesToday?: number;
+}
+
 export interface ProfitLossSummary {
   timeframe: 'month' | 'year';
   periodLabel: string;

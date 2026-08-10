@@ -26,6 +26,18 @@
   type Timeframe = 'today' | 'week' | 'month' | 'year';
   let activeTimeframe: Timeframe = 'today';
 
+  let sortKey = 'invoice';
+  let sortOrder: 'asc' | 'desc' = 'desc';
+
+  function toggleSort(key: string) {
+    if (sortKey === key) {
+      sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortKey = key;
+      sortOrder = 'asc';
+    }
+  }
+
   const timeframeLabels: Record<Timeframe, string> = {
     today: 'Hari Ini',
     week: '7 Hari Terakhir',
@@ -47,9 +59,22 @@
   $: maxOrders = Math.max(1, ...chartItems.map((d) => d.orders));
   $: maxRev = Math.max(1, ...chartItems.map((d) => d.rev));
 
-  $: recentOrdersList = ($dashboardStats.recentOrders && $dashboardStats.recentOrders.length > 0)
+  $: rawOrdersList = ($dashboardStats.recentOrders && $dashboardStats.recentOrders.length > 0)
     ? $dashboardStats.recentOrders
     : $orders.slice(0, 5);
+
+  $: recentOrdersList = [...rawOrdersList].sort((a: any, b: any) => {
+    let valA = a[sortKey];
+    let valB = b[sortKey];
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return sortOrder === 'asc' ? valA - valB : valB - valA;
+    }
+    valA = (valA || '').toString().toLowerCase();
+    valB = (valB || '').toString().toLowerCase();
+    if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+    if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
 
   $: activeProgressList = ($dashboardStats.activeProgress && $dashboardStats.activeProgress.length > 0)
     ? $dashboardStats.activeProgress
@@ -131,8 +156,8 @@
         />
         <StatCard
           title="Pesanan Masuk"
-          value={$dashboardStats.todayOrders}
-          subtitle="Total nota masuk"
+          value={$dashboardStats.periodOrdersCount !== undefined ? $dashboardStats.periodOrdersCount : $dashboardStats.todayOrders}
+          subtitle="Nota masuk ({timeframeLabels[activeTimeframe]})"
           icon={ShoppingBag}
           iconColor="text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60"
         />
@@ -319,11 +344,36 @@
             <tr
               class="border-b border-slate-100 dark:border-slate-800 text-[11px] font-extrabold uppercase tracking-wider text-slate-400"
             >
-              <th class="py-3 px-3">No. Nota</th>
-              <th class="py-3 px-3">Pelanggan</th>
-              <th class="py-3 px-3">Layanan</th>
-              <th class="py-3 px-3">Total</th>
-              <th class="py-3 px-3">Status</th>
+              <th class="py-3 px-3 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('invoice')}>
+                <div class="flex items-center gap-1">
+                  <span>No. Nota</span>
+                  {#if sortKey === 'invoice'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
+              <th class="py-3 px-3 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('customer_nama')}>
+                <div class="flex items-center gap-1">
+                  <span>Pelanggan</span>
+                  {#if sortKey === 'customer_nama'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
+              <th class="py-3 px-3 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('service_nama')}>
+                <div class="flex items-center gap-1">
+                  <span>Layanan</span>
+                  {#if sortKey === 'service_nama'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
+              <th class="py-3 px-3 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('total')}>
+                <div class="flex items-center gap-1">
+                  <span>Total</span>
+                  {#if sortKey === 'total'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
+              <th class="py-3 px-3 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('status')}>
+                <div class="flex items-center gap-1">
+                  <span>Status</span>
+                  {#if sortKey === 'status'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody

@@ -12,23 +12,46 @@
     ArrowDownRight,
     AlertTriangle,
     CheckCircle2,
+    Layers,
+    ArrowDown,
+    Minus,
+    Plus,
+    Equal
   } from "lucide-svelte";
 
-  let timeframe: "month" | "year" = "month";
-  let monthFilter = new Date().toISOString().slice(0, 7);
-  let yearFilter = new Date().getFullYear().toString();
+  type Timeframe = "today" | "week" | "month" | "year";
+  let activeTimeframe: Timeframe = "month";
+
+  const timeframeLabels: Record<Timeframe, string> = {
+    today: "Hari Ini",
+    week: "7 Hari Terakhir",
+    month: "Bulan Ini",
+    year: "Tahun Ini"
+  };
+
+  let sortKey = "amount";
+  let sortOrder: "asc" | "desc" = "desc";
+
+  function toggleSort(key: string) {
+    if (sortKey === key) {
+      sortOrder = sortOrder === "asc" ? "desc" : "asc";
+    } else {
+      sortKey = key;
+      sortOrder = "desc";
+    }
+  }
 
   onMount(() => {
     fetchData();
   });
 
   function fetchData() {
-    loadProfitLoss(timeframe, monthFilter, yearFilter);
+    loadProfitLoss(activeTimeframe);
   }
 
-  function handleTimeframeChange(tf: "month" | "year") {
-    timeframe = tf;
-    fetchData();
+  function handleTimeframeChange(tf: Timeframe) {
+    activeTimeframe = tf;
+    loadProfitLoss(tf);
   }
 
   function formatRupiah(num: number) {
@@ -53,10 +76,31 @@
         return "bg-slate-500";
     }
   }
+
+  $: breakdownList = $profitLoss
+    ? Object.entries($profitLoss.breakdownKategori).map(([cat, amount]) => {
+        const numAmt = Number(amount) || 0;
+        const pct = $profitLoss.totalExpenses > 0 ? Math.round((numAmt / $profitLoss.totalExpenses) * 100) : 0;
+        return { cat, amount: numAmt, pct };
+      })
+    : [];
+
+  $: sortedBreakdown = [...breakdownList].sort((a, b) => {
+    let valA = a[sortKey as keyof typeof a];
+    let valB = b[sortKey as keyof typeof b];
+    if (typeof valA === "number" && typeof valB === "number") {
+      return sortOrder === "asc" ? valA - valB : valB - valA;
+    }
+    valA = (valA || "").toString().toLowerCase();
+    valB = (valB || "").toString().toLowerCase();
+    if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+    if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+    return 0;
+  });
 </script>
 
 <svelte:head>
-  <title>SVRA Laundry - Laporan Laba Rugi</title>
+  <title>SVRA Laundry - Laporan Laba Rugi Air Terjun</title>
 </svelte:head>
 
 <div class="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
@@ -67,33 +111,26 @@
         <div class="p-2.5 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 rounded-2xl">
           <TrendingUp class="w-7 h-7" />
         </div>
-        Laporan Laba Rugi
+        Laporan Laba Rugi Air Terjun
       </h1>
       <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
-        Rekapitulasi performa keuangan: Total Pemasukan − Total Pengeluaran.
+        Rekapitulasi keuangan metode Air Terjun (Waterfall): Omset Kotor − Potongan Biaya = Laba/Rugi Bersih.
       </p>
     </div>
 
     <!-- Timeframe Filter Chips -->
-    <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
-      <button
-        type="button"
-        on:click={() => handleTimeframeChange("month")}
-        class="px-4 py-2 text-xs font-bold rounded-xl transition-all {timeframe === 'month'
-          ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-white shadow-md'
-          : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'}"
-      >
-        Bulan Ini
-      </button>
-      <button
-        type="button"
-        on:click={() => handleTimeframeChange("year")}
-        class="px-4 py-2 text-xs font-bold rounded-xl transition-all {timeframe === 'year'
-          ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-white shadow-md'
-          : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'}"
-      >
-        Tahun Ini ({yearFilter})
-      </button>
+    <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 flex-wrap gap-1">
+      {#each (['today', 'week', 'month', 'year'] as Timeframe[]) as tf}
+        <button
+          type="button"
+          on:click={() => handleTimeframeChange(tf)}
+          class="px-4 py-2 text-xs font-bold rounded-xl transition-all {activeTimeframe === tf
+            ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-white shadow-md'
+            : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'}"
+        >
+          {timeframeLabels[tf]}
+        </button>
+      {/each}
     </div>
   </div>
 
@@ -101,10 +138,11 @@
     <!-- Loading State -->
     <div class="p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-4 bg-white dark:bg-slate-800/80 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
       <div class="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-      <p class="text-sm font-semibold">Kalkulasi Laba Rugi & Rekapitulasi Keuangan...</p>
+      <p class="text-sm font-semibold">Kalkulasi Air Terjun Laba Rugi...</p>
     </div>
   {:else}
-    <!-- Highlight Status Banner (Eksplisit Ditandai Jika Rugi / Laba) -->
+    {@const baseRev = Math.max(1, $profitLoss.totalRevenue)}
+    <!-- Highlight Status Banner -->
     <div
       class="p-6 md:p-8 rounded-3xl border shadow-sm relative overflow-hidden transition-all duration-300
       {$profitLoss.status === 'LABA'
@@ -134,10 +172,10 @@
                   ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300'
                   : 'bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300'}"
               >
-                STATUS PERSIAPAN KEUANGAN: {$profitLoss.status} BERSIH
+                STATUS KEUANGAN: {$profitLoss.status} BERSIH
               </span>
               <span class="text-xs text-slate-500 dark:text-slate-400 font-semibold">
-                Periode: {$profitLoss.periodLabel}
+                Periode: {timeframeLabels[activeTimeframe]}
               </span>
             </div>
 
@@ -148,7 +186,7 @@
               {#if $profitLoss.status === 'LABA'}
                 Pemasukan bisnis berada di atas seluruh biaya operasional & pengeluaran.
               {:else}
-                <span class="font-bold text-rose-600 dark:text-rose-400">PERHATIAN:</span> Total pengeluaran melebihi pemasukan pada periode terpilih ini!
+                <span class="font-bold text-rose-600 dark:text-rose-400">PERHATIAN:</span> Total pengeluaran melebihi pemasukan pada periode {timeframeLabels[activeTimeframe].toLowerCase()}!
               {/if}
             </p>
           </div>
@@ -169,10 +207,9 @@
 
     <!-- 3 Summary Metrics Cards -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-      <!-- Total Pemasukan -->
       <div class="bg-white dark:bg-slate-800/80 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
         <div class="flex items-center justify-between">
-          <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Pemasukan (Omset)</p>
+          <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Omset Kotor</p>
           <div class="p-3 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-2xl">
             <ArrowUpRight class="w-6 h-6" />
           </div>
@@ -180,10 +217,9 @@
         <h3 class="text-2xl font-extrabold text-slate-900 dark:text-white mt-3">
           {formatRupiah($profitLoss.totalRevenue)}
         </h3>
-        <p class="text-xs text-slate-400 mt-2">Dari transaksi laundry terdaftar</p>
+        <p class="text-xs text-slate-400 mt-2">Pemasukan {timeframeLabels[activeTimeframe]}</p>
       </div>
 
-      <!-- Total Pengeluaran -->
       <div class="bg-white dark:bg-slate-800/80 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
         <div class="flex items-center justify-between">
           <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Total Pengeluaran</p>
@@ -194,10 +230,9 @@
         <h3 class="text-2xl font-extrabold text-slate-900 dark:text-white mt-3">
           {formatRupiah($profitLoss.totalExpenses)}
         </h3>
-        <p class="text-xs text-slate-400 mt-2">Deterjen, listrik, gaji, & maintenance</p>
+        <p class="text-xs text-slate-400 mt-2">Biaya operasional {timeframeLabels[activeTimeframe]}</p>
       </div>
 
-      <!-- Laba / Rugi Bersih -->
       <div class="bg-white dark:bg-slate-800/80 p-6 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
         <div class="flex items-center justify-between">
           <p class="text-xs font-bold uppercase tracking-wider text-slate-400">Laba / Rugi Bersih</p>
@@ -213,92 +248,156 @@
         <h3 class="text-2xl font-extrabold text-slate-900 dark:text-white mt-3">
           {$profitLoss.status === 'LABA' ? '+' : '-'}{formatRupiah($profitLoss.labaRugi)}
         </h3>
-        <p class="text-xs text-slate-400 mt-2">Selisih kas operasional bersih</p>
+        <p class="text-xs text-slate-400 mt-2">Hasil kas operasional bersih</p>
       </div>
     </div>
 
-    <!-- Breakdown Pengeluaran per Kategori & Monthly Chart Comparison -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-      <!-- Breakdown Kategori Pengeluaran -->
-      <div class="bg-white dark:bg-slate-800/80 p-6 md:p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-6">
-        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-4">
-          <div>
-            <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <PieChart class="w-5 h-5 text-purple-600" />
-              Breakdown Pengeluaran per Kategori
-            </h3>
-            <p class="text-xs text-slate-400 mt-0.5">Persentase alokasi dana operasional</p>
+    <!-- WATERFALL FINANCIAL DIAGRAM (DIAGRAM AIR TERJUN) -->
+    <div class="bg-white dark:bg-slate-800/80 p-6 md:p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-6">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-4">
+        <div>
+          <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Layers class="w-5 h-5 text-indigo-600" />
+            Diagram Air Terjun Keuangan (Waterfall Flow)
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">Alur pengurangan pemasukan kotor oleh setiap elemen biaya operasional</p>
+        </div>
+        <span class="px-3 py-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-xs font-bold rounded-full border border-indigo-200 dark:border-indigo-800">
+          Metode Waterfall
+        </span>
+      </div>
+
+      <div class="space-y-4 pt-2">
+        <!-- 1. Omset Kotor (Start Base) -->
+        <div class="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200/60 dark:border-emerald-800/50 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300">
+              <span class="p-1 bg-emerald-600 text-white rounded-lg"><Plus class="w-3.5 h-3.5" /></span>
+              <span>1. Total Omset Kotor (Pemasukan)</span>
+            </div>
+            <span class="font-extrabold text-emerald-700 dark:text-emerald-300 text-sm font-mono">
+              +{formatRupiah($profitLoss.totalRevenue)}
+            </span>
           </div>
-          <span class="text-xs font-bold text-slate-500">
-            {formatRupiah($profitLoss.totalExpenses)}
-          </span>
+          <div class="w-full h-3 bg-emerald-200/60 dark:bg-emerald-900/50 rounded-full overflow-hidden">
+            <div class="h-full bg-emerald-500 rounded-full w-full"></div>
+          </div>
         </div>
 
-        <div class="space-y-4">
-          {#each Object.entries($profitLoss.breakdownKategori) as [cat, rawAmount]}
-            {@const amount = Number(rawAmount) || 0}
-            {@const pct = $profitLoss.totalExpenses > 0 ? Math.round((amount / $profitLoss.totalExpenses) * 100) : 0}
-            <div class="space-y-1.5">
+        <!-- 2. Waterfall Expense Deductions -->
+        <div class="pl-4 md:pl-8 border-l-2 border-slate-200 dark:border-slate-700 space-y-3">
+          {#each breakdownList as item}
+            {@const expPctOfRev = Math.round((item.amount / baseRev) * 100)}
+            <div class="p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1.5">
               <div class="flex items-center justify-between text-xs">
-                <span class="font-bold text-slate-700 dark:text-slate-300">{cat}</span>
-                <span class="font-semibold text-slate-500 dark:text-slate-400">
-                  {formatRupiah(amount)} ({pct}%)
+                <div class="flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-300">
+                  <span class="p-1 bg-rose-500 text-white rounded-lg"><Minus class="w-3.5 h-3.5" /></span>
+                  <span>{item.cat}</span>
+                </div>
+                <span class="font-bold text-rose-600 dark:text-rose-400 font-mono">
+                  -{formatRupiah(item.amount)} ({expPctOfRev}% dari Omset)
                 </span>
               </div>
-              <div class="w-full h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+              <div class="w-full h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                 <div
-                  class="h-full rounded-full transition-all duration-500 {getCategoryColor(cat)}"
-                  style="width: {pct}%"
+                  class="h-full rounded-full {getCategoryColor(item.cat)}"
+                  style="width: {Math.min(100, Math.max(2, expPctOfRev))}%"
                 ></div>
               </div>
             </div>
           {/each}
-        </div>
-      </div>
 
-      <!-- Monthly Trend Comparison (Pemasukan vs Pengeluaran) -->
-      <div class="bg-white dark:bg-slate-800/80 p-6 md:p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-6">
-        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-4">
-          <div>
-            <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Calendar class="w-5 h-5 text-blue-600" />
-              Tren Bulanan ({yearFilter})
-            </h3>
-            <p class="text-xs text-slate-400 mt-0.5">Perbandingan Pemasukan (Hijau) vs Pengeluaran (Merah)</p>
+          <!-- Total Pengeluaran Bar -->
+          <div class="p-3.5 bg-rose-50/70 dark:bg-rose-950/30 rounded-xl border border-rose-200/60 dark:border-rose-800/50 space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <div class="flex items-center gap-2 font-extrabold text-rose-800 dark:text-rose-300">
+                <span class="p-1 bg-rose-600 text-white rounded-lg"><ArrowDown class="w-3.5 h-3.5" /></span>
+                <span>Subtotal Pengeluaran (Total Deductions)</span>
+              </div>
+              <span class="font-extrabold text-rose-700 dark:text-rose-300 text-sm font-mono">
+                -{formatRupiah($profitLoss.totalExpenses)} ({Math.round(($profitLoss.totalExpenses / baseRev) * 100)}%)
+              </span>
+            </div>
           </div>
         </div>
 
-        <div class="space-y-3 max-h-[320px] overflow-y-auto pr-2">
-          {#each $profitLoss.monthlyData as item}
-            <div class="p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs">
-              <div class="font-bold text-slate-800 dark:text-slate-200 w-12">{item.label}</div>
-
-              <div class="flex-1 px-4 space-y-1">
-                <!-- Bar Revenue -->
-                <div class="flex items-center gap-2">
-                  <span class="text-[10px] text-emerald-600 font-bold w-12">Masuk</span>
-                  <div class="flex-1 bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                    <div class="bg-emerald-500 h-full rounded-full" style="width: {Math.min(100, Math.max(5, (item.revenue / 60000000) * 100))}%"></div>
-                  </div>
-                  <span class="text-[10px] font-semibold text-slate-500">{formatRupiah(item.revenue)}</span>
-                </div>
-
-                <!-- Bar Expenses -->
-                <div class="flex items-center gap-2">
-                  <span class="text-[10px] text-rose-600 font-bold w-12">Keluar</span>
-                  <div class="flex-1 bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
-                    <div class="bg-rose-500 h-full rounded-full" style="width: {Math.min(100, Math.max(5, (item.expenses / 30000000) * 100))}%"></div>
-                  </div>
-                  <span class="text-[10px] font-semibold text-slate-500">{formatRupiah(item.expenses)}</span>
-                </div>
-              </div>
-
-              <div class="text-right pl-3 font-extrabold {item.profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">
-                {item.profit >= 0 ? '+' : '-'}{formatRupiah(item.profit)}
-              </div>
+        <!-- 3. Final Net Profit / Loss -->
+        <div class="p-4 bg-gradient-to-r {$profitLoss.status === 'LABA' ? 'from-emerald-500/15 via-teal-500/10 to-emerald-500/15 border-emerald-300 dark:border-emerald-700' : 'from-rose-500/15 via-amber-500/10 to-rose-500/15 border-rose-300 dark:border-rose-700'} rounded-2xl border-2 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2 font-black text-slate-900 dark:text-white text-sm">
+              <span class="p-1.5 {$profitLoss.status === 'LABA' ? 'bg-emerald-600' : 'bg-rose-600'} text-white rounded-lg"><Equal class="w-4 h-4" /></span>
+              <span>Sisa Kas Operasional Akhir ({$profitLoss.status} BERSIH)</span>
             </div>
-          {/each}
+            <span class="font-black {$profitLoss.status === 'LABA' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} text-base font-mono">
+              {$profitLoss.status === 'LABA' ? '+' : '-'}{formatRupiah($profitLoss.labaRugi)}
+            </span>
+          </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Breakdown Table & Sortable Headers -->
+    <div class="bg-white dark:bg-slate-800/80 p-6 md:p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-6">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-4">
+        <div>
+          <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <PieChart class="w-5 h-5 text-purple-600" />
+            Tabel Breakdown Pengeluaran per Kategori
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">Klik header kolom untuk mengurutkan data (*Sortable*)</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-100 dark:border-slate-700/60 text-xs font-extrabold uppercase text-slate-400">
+              <th class="py-3 px-3 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort("cat")}>
+                <div class="flex items-center gap-1">
+                  <span>Kategori Pengeluaran</span>
+                  {#if sortKey === "cat"}<span class="text-blue-600 font-bold">{sortOrder === "asc" ? "↑" : "↓"}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
+              <th class="py-3 px-3 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort("amount")}>
+                <div class="flex items-center gap-1">
+                  <span>Nominal Biaya</span>
+                  {#if sortKey === "amount"}<span class="text-blue-600 font-bold">{sortOrder === "asc" ? "↑" : "↓"}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
+              <th class="py-3 px-3 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort("pct")}>
+                <div class="flex items-center gap-1">
+                  <span>% Alokasi Biaya</span>
+                  {#if sortKey === "pct"}<span class="text-blue-600 font-bold">{sortOrder === "asc" ? "↑" : "↓"}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+            {#each sortedBreakdown as item}
+              <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+                <td class="py-3.5 px-3 font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                  <div class="w-2.5 h-2.5 rounded-full {getCategoryColor(item.cat)}"></div>
+                  <span>{item.cat}</span>
+                </td>
+                <td class="py-3.5 px-3 font-extrabold text-slate-900 dark:text-white font-mono">
+                  {formatRupiah(item.amount)}
+                </td>
+                <td class="py-3.5 px-3 text-slate-600 dark:text-slate-400 font-semibold">
+                  <div class="flex items-center gap-2">
+                    <span>{item.pct}%</span>
+                    <div class="w-24 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div class="h-full rounded-full {getCategoryColor(item.cat)}" style="width: {item.pct}%"></div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            {:else}
+              <tr>
+                <td colspan="3" class="py-8 text-center text-slate-400">Tidak ada pengeluaran pada periode ini.</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       </div>
     </div>
   {/if}

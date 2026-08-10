@@ -31,6 +31,19 @@
   let searchInput = '';
   let searchTimeout: any;
 
+  // Sorting State
+  let sortKey = 'nama';
+  let sortOrder: 'asc' | 'desc' = 'asc';
+
+  function toggleSort(key: string) {
+    if (sortKey === key) {
+      sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortKey = key;
+      sortOrder = 'asc';
+    }
+  }
+
   onMount(() => {
     loadCustomers(1, 10, searchInput);
   });
@@ -46,8 +59,6 @@
     if (p < 1 || p > $paginationState.totalPages) return;
     loadCustomers(p, 10, searchInput);
   }
-
-
 
   function handleOpenAdd() {
     editCustomerData = null;
@@ -71,10 +82,21 @@
     }
   }
 
-
+  $: sortedCustomers = [...$customers].sort((a: any, b: any) => {
+    let valA = a[sortKey];
+    let valB = b[sortKey];
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return sortOrder === 'asc' ? valA - valB : valB - valA;
+    }
+    valA = (valA || '').toString().toLowerCase();
+    valB = (valB || '').toString().toLowerCase();
+    if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+    if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
 </script>
 
-<div class="space-y-6">
+<div class="space-y-6 max-w-7xl mx-auto">
   <!-- Page Header -->
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div>
@@ -120,8 +142,6 @@
         class="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-600"
       />
     </div>
-
-    </div>
   </div>
 
   <!-- Customers Table Card -->
@@ -130,11 +150,36 @@
       <table class="w-full text-left border-collapse">
         <thead>
           <tr class="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-            <th class="py-4 px-6">ID Customer</th>
-            <th class="py-4 px-6">Nama Pelanggan</th>
-            <th class="py-4 px-6">No. WhatsApp / HP</th>
-            <th class="py-4 px-6">Alamat</th>
-            <th class="py-4 px-6">Tgl Terdaftar</th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('id')}>
+              <div class="flex items-center gap-1">
+                <span>ID Customer</span>
+                {#if sortKey === 'id'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('nama')}>
+              <div class="flex items-center gap-1">
+                <span>Nama Pelanggan</span>
+                {#if sortKey === 'nama'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('hp')}>
+              <div class="flex items-center gap-1">
+                <span>No. WhatsApp / HP</span>
+                {#if sortKey === 'hp'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('alamat')}>
+              <div class="flex items-center gap-1">
+                <span>Alamat</span>
+                {#if sortKey === 'alamat'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('created_at')}>
+              <div class="flex items-center gap-1">
+                <span>Tgl Terdaftar</span>
+                {#if sortKey === 'created_at'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
             <th class="py-4 px-6 text-right">Aksi</th>
           </tr>
         </thead>
@@ -142,105 +187,104 @@
           {#if $isLoading}
             <TableRowSkeleton cols={6} rows={5} />
           {:else}
-            {#each $customers as cust}
-            <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group">
-              <td class="py-4 px-6 font-mono font-bold text-blue-600 dark:text-blue-400">
-                {cust.id}
-              </td>
-              <td class="py-4 px-6 font-bold text-slate-800 dark:text-slate-100">
-                {cust.nama}
-              </td>
-              <td class="py-4 px-6 text-slate-600 dark:text-slate-300">
-                <span class="inline-flex items-center gap-1.5">
-                  <Phone class="w-3.5 h-3.5 text-emerald-500" />
-                  {cust.hp}
-                </span>
-              </td>
-              <td class="py-4 px-6 text-slate-600 dark:text-slate-400 max-w-xs truncate">
-                <span class="inline-flex items-center gap-1.5">
-                  <MapPin class="w-3.5 h-3.5 text-rose-500" />
-                  {cust.alamat}
-                </span>
-              </td>
-              <td class="py-4 px-6 text-slate-500 dark:text-slate-400">
-                {formatDateShort(cust.created_at)}
-              </td>
-              <td class="py-4 px-6 text-right">
-                <div class="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    on:click={() => handleOpenEdit(cust)}
-                    class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 rounded-xl transition"
-                    title="Edit Customer"
-                  >
-                    <Edit2 class="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    on:click={() => handleOpenDelete(cust.id)}
-                    class="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition"
-                    title="Hapus Customer"
-                  >
-                    <Trash2 class="w-4 h-4" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          {:else}
-            <tr>
-              <td colspan="6" class="py-12 text-center text-slate-400 text-sm">
-                Tidak ada data pelanggan yang cocok.
-              </td>
-            </tr>
-          {/each}
+            {#each sortedCustomers as cust}
+              <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group">
+                <td class="py-4 px-6 font-mono font-bold text-blue-600 dark:text-blue-400">
+                  {cust.id}
+                </td>
+                <td class="py-4 px-6 font-bold text-slate-800 dark:text-slate-100">
+                  {cust.nama}
+                </td>
+                <td class="py-4 px-6 text-slate-600 dark:text-slate-300">
+                  <span class="inline-flex items-center gap-1.5">
+                    <Phone class="w-3.5 h-3.5 text-emerald-500" />
+                    {cust.hp}
+                  </span>
+                </td>
+                <td class="py-4 px-6 text-slate-600 dark:text-slate-400 max-w-xs truncate">
+                  <span class="inline-flex items-center gap-1.5">
+                    <MapPin class="w-3.5 h-3.5 text-rose-500" />
+                    {cust.alamat}
+                  </span>
+                </td>
+                <td class="py-4 px-6 text-slate-500 dark:text-slate-400">
+                  {formatDateShort(cust.created_at)}
+                </td>
+                <td class="py-4 px-6 text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      on:click={() => handleOpenEdit(cust)}
+                      class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 rounded-xl transition"
+                      title="Edit Customer"
+                    >
+                      <Edit2 class="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      on:click={() => handleOpenDelete(cust.id)}
+                      class="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition"
+                      title="Hapus Customer"
+                    >
+                      <Trash2 class="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            {:else}
+              <tr>
+                <td colspan="6" class="py-12 text-center text-slate-400">
+                  Tidak ada pelanggan ditemukan.
+                </td>
+              </tr>
+            {/each}
           {/if}
         </tbody>
       </table>
     </div>
 
-    <!-- Pagination Controls -->
-    <div class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+    <!-- Pagination Footer -->
+    <div class="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-slate-500">
       <div>
-        Menampilkan <strong class="text-slate-800 dark:text-white">{$paginationState.from} - {$paginationState.to}</strong> dari total <strong class="text-slate-800 dark:text-white">{$paginationState.total}</strong> pelanggan
+        Menampilkan {$paginationState.from} - {$paginationState.to} dari {$paginationState.total} pelanggan
       </div>
 
       <div class="flex items-center gap-2">
         <button
           type="button"
-          disabled={$paginationState.page <= 1 || $isLoading}
           on:click={() => goToPage($paginationState.page - 1)}
-          class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-          title="Halaman Sebelumnya"
+          disabled={$paginationState.page <= 1 || $isLoading}
+          class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 disabled:opacity-40 transition"
         >
           <ChevronLeft class="w-4 h-4" />
         </button>
-        <span class="font-bold text-slate-800 dark:text-slate-200 px-2">
-          Halaman {$paginationState.page} / {$paginationState.totalPages}
-        </span>
+
+        <span>Halaman {$paginationState.page} dari {$paginationState.totalPages}</span>
+
         <button
           type="button"
-          disabled={$paginationState.page >= $paginationState.totalPages || $isLoading}
           on:click={() => goToPage($paginationState.page + 1)}
-          class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-          title="Halaman Selanjutnya"
+          disabled={$paginationState.page >= $paginationState.totalPages || $isLoading}
+          class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 disabled:opacity-40 transition"
         >
           <ChevronRight class="w-4 h-4" />
         </button>
       </div>
     </div>
   </div>
+</div>
 
-<!-- Add/Edit Customer Modal -->
+<!-- Modal Dialogs -->
 <CustomerModal
   bind:show={showModal}
-  bind:editData={editCustomerData}
+  editData={editCustomerData}
 />
 
-<!-- Delete Confirm Modal -->
 <ConfirmModal
   bind:show={showConfirmDelete}
-  title="Hapus Pelanggan"
-  message="Apakah Anda yakin ingin menghapus data pelanggan ini? Seluruh riwayat transaksi yang bersangkutan akan tetap disimpan secara terpisah."
+  title="Hapus Pelanggan?"
+  message="Data pelanggan ini akan dihapus dari sistem. Yakin ingin melanjutkan?"
+  confirmText="Ya, Hapus"
+  cancelText="Batal"
   onConfirm={confirmDeleteAction}
-  onClose={() => (showConfirmDelete = false)}
 />

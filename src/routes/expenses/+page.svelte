@@ -24,6 +24,11 @@
     X,
     Check,
     AlertCircle,
+    UserCheck,
+    Wrench,
+    Package,
+    Zap,
+    Briefcase
   } from "lucide-svelte";
 
   const categories: ExpenseCategory[] = [
@@ -34,10 +39,34 @@
     "Operasional & Lain-lain",
   ];
 
+  type Timeframe = "today" | "week" | "month" | "year" | "all";
+  let selectedTimeframe: Timeframe = "all";
+
+  const timeframeLabels: Record<Timeframe, string> = {
+    today: "Hari Ini",
+    week: "7 Hari Terakhir",
+    month: "Bulan Ini",
+    year: "Tahun Ini",
+    all: "Semua Periode"
+  };
+
   let searchQuery = "";
   let selectedCategory = "Semua";
   let selectedYear = "Semua";
   let currentPage = 1;
+
+  // Sorting State
+  let sortKey = "tanggal";
+  let sortOrder: "asc" | "desc" = "desc";
+
+  function toggleSort(key: string) {
+    if (sortKey === key) {
+      sortOrder = sortOrder === "asc" ? "desc" : "asc";
+    } else {
+      sortKey = key;
+      sortOrder = "desc";
+    }
+  }
 
   // Modal State
   let isAddModalOpen = false;
@@ -55,7 +84,13 @@
   });
 
   function fetchExpenses() {
-    loadExpenses(currentPage, 10, selectedCategory, selectedYear, searchQuery);
+    loadExpenses(currentPage, 10, selectedCategory, selectedYear, searchQuery, selectedTimeframe);
+  }
+
+  function handleTimeframeChange(tf: Timeframe) {
+    selectedTimeframe = tf;
+    currentPage = 1;
+    fetchExpenses();
   }
 
   function handleSearch() {
@@ -65,12 +100,6 @@
 
   function handleFilterCategory(cat: string) {
     selectedCategory = cat;
-    currentPage = 1;
-    fetchExpenses();
-  }
-
-  function handleFilterYear(yr: string) {
-    selectedYear = yr;
     currentPage = 1;
     fetchExpenses();
   }
@@ -133,6 +162,27 @@
         return "bg-slate-50 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700";
     }
   }
+
+  $: sortedExpenses = [...$expenses].sort((a: any, b: any) => {
+    let valA = a[sortKey];
+    let valB = b[sortKey];
+    if (typeof valA === "number" && typeof valB === "number") {
+      return sortOrder === "asc" ? valA - valB : valB - valA;
+    }
+    valA = (valA || "").toString().toLowerCase();
+    valB = (valB || "").toString().toLowerCase();
+    if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+    if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  $: byCat = $expensesSummary?.byCategory || {
+    "Bahan Baku / Deterjen": 0,
+    "Listrik & Air": 0,
+    "Gaji Karyawan": 0,
+    "Maintenance Mesin": 0,
+    "Operasional & Lain-lain": 0,
+  };
 </script>
 
 <svelte:head>
@@ -154,66 +204,140 @@
       </p>
     </div>
 
-    <button
-      type="button"
-      on:click={() => (isAddModalOpen = true)}
-      class="inline-flex items-center justify-center gap-2 px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-rose-600/25 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-    >
-      <Plus class="w-5 h-5" />
-      Tambah Pengeluaran
-    </button>
+    <div class="flex items-center gap-3">
+      <!-- Timeframe Filter Chips -->
+      <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 flex-wrap gap-1">
+        {#each (['today', 'week', 'month', 'year', 'all'] as Timeframe[]) as tf}
+          <button
+            type="button"
+            on:click={() => handleTimeframeChange(tf)}
+            class="px-3 py-1.5 text-xs font-bold rounded-xl transition-all {selectedTimeframe === tf
+              ? 'bg-white dark:bg-slate-700 text-rose-600 dark:text-white shadow-md'
+              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'}"
+          >
+            {timeframeLabels[tf]}
+          </button>
+        {/each}
+      </div>
+
+      <button
+        type="button"
+        on:click={() => (isAddModalOpen = true)}
+        class="inline-flex items-center justify-center gap-2 px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-rose-600/25 transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] shrink-0"
+      >
+        <Plus class="w-5 h-5" />
+        Tambah Pengeluaran
+      </button>
+    </div>
   </div>
 
-  <!-- Summary Cards -->
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
-    <div class="bg-white dark:bg-slate-800/80 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+  <!-- SUMMARY CARDS BY CATEGORY (Filtered dynamically by timeframe) -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+    <!-- Card 1: Total Pengeluaran -->
+    <div class="bg-white dark:bg-slate-800/80 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Pengeluaran Bulan Ini</p>
-          <h3 class="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
-            {formatRupiah($expensesSummary.totalExpensesThisMonth)}
+          <p class="text-[11px] font-extrabold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Total Pengeluaran</p>
+          <h3 class="text-2xl font-black text-slate-900 dark:text-white mt-1">
+            {formatRupiah($expensesSummary.totalExpenses || 0)}
           </h3>
         </div>
         <div class="p-3 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl">
           <TrendingDown class="w-6 h-6" />
         </div>
       </div>
-      <div class="mt-4 text-xs text-slate-500 dark:text-slate-400">
-        Total seluruh kategori operasional bulan berjalan
+      <div class="mt-3 text-xs text-slate-400 font-medium">
+        Filter: {timeframeLabels[selectedTimeframe]} ({$expensesSummary.totalCount || $paginationState.total} Item)
       </div>
     </div>
 
-    <div class="bg-white dark:bg-slate-800/80 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+    <!-- Card 2: Gaji Karyawan -->
+    <div class="bg-white dark:bg-slate-800/80 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Pengeluaran Hari Ini</p>
-          <h3 class="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
-            {formatRupiah($expensesSummary.totalExpensesToday)}
+          <p class="text-[11px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">Gaji Karyawan</p>
+          <h3 class="text-2xl font-black text-slate-900 dark:text-white mt-1">
+            {formatRupiah(byCat['Gaji Karyawan'] || 0)}
           </h3>
         </div>
-        <div class="p-3 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl">
-          <Calendar class="w-6 h-6" />
+        <div class="p-3 bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl">
+          <UserCheck class="w-6 h-6" />
         </div>
       </div>
-      <div class="mt-4 text-xs text-slate-500 dark:text-slate-400">
-        Pengeluaran kas kecil hari ini
+      <div class="mt-3 text-xs text-slate-400 font-medium">
+        Honor, insentif, & gaji kasir/operator
       </div>
     </div>
 
-    <div class="bg-white dark:bg-slate-800/80 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+    <!-- Card 3: Maintenance Mesin -->
+    <div class="bg-white dark:bg-slate-800/80 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
       <div class="flex items-center justify-between">
         <div>
-          <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Total Catatan Pengeluaran</p>
-          <h3 class="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">
-            {$paginationState.total} Item
+          <p class="text-[11px] font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Maintenance Mesin</p>
+          <h3 class="text-2xl font-black text-slate-900 dark:text-white mt-1">
+            {formatRupiah(byCat['Maintenance Mesin'] || 0)}
+          </h3>
+        </div>
+        <div class="p-3 bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 rounded-xl">
+          <Wrench class="w-6 h-6" />
+        </div>
+      </div>
+      <div class="mt-3 text-xs text-slate-400 font-medium">
+        Perbaikan & servis mesin cuci/pengering
+      </div>
+    </div>
+
+    <!-- Card 4: Bahan Baku / Deterjen -->
+    <div class="bg-white dark:bg-slate-800/80 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">Bahan Baku / Deterjen</p>
+          <h3 class="text-2xl font-black text-slate-900 dark:text-white mt-1">
+            {formatRupiah(byCat['Bahan Baku / Deterjen'] || 0)}
           </h3>
         </div>
         <div class="p-3 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl">
-          <Receipt class="w-6 h-6" />
+          <Package class="w-6 h-6" />
         </div>
       </div>
-      <div class="mt-4 text-xs text-slate-500 dark:text-slate-400">
-        Jumlah entri transaksi terdaftar
+      <div class="mt-3 text-xs text-slate-400 font-medium">
+        Deterjen, pewangi, softener, & plastik
+      </div>
+    </div>
+
+    <!-- Card 5: Listrik & Air -->
+    <div class="bg-white dark:bg-slate-800/80 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Listrik & Air</p>
+          <h3 class="text-2xl font-black text-slate-900 dark:text-white mt-1">
+            {formatRupiah(byCat['Listrik & Air'] || 0)}
+          </h3>
+        </div>
+        <div class="p-3 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-xl">
+          <Zap class="w-6 h-6" />
+        </div>
+      </div>
+      <div class="mt-3 text-xs text-slate-400 font-medium">
+        Tagihan PLN, PAM, & konsumsi utilitas
+      </div>
+    </div>
+
+    <!-- Card 6: Operasional & Lain-lain -->
+    <div class="bg-white dark:bg-slate-800/80 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Operasional & Lain-lain</p>
+          <h3 class="text-2xl font-black text-slate-900 dark:text-white mt-1">
+            {formatRupiah(byCat['Operasional & Lain-lain'] || 0)}
+          </h3>
+        </div>
+        <div class="p-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl">
+          <Briefcase class="w-6 h-6" />
+        </div>
+      </div>
+      <div class="mt-3 text-xs text-slate-400 font-medium">
+        Biaya kebersihan, ATK, & tak terduga
       </div>
     </div>
   </div>
@@ -233,9 +357,8 @@
         />
       </div>
 
-      <!-- Filters & Year Chips -->
-      <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
-        <!-- Category Dropdown Filter -->
+      <!-- Category Filter Dropdown -->
+      <div class="flex items-center gap-3 w-full md:w-auto">
         <select
           bind:value={selectedCategory}
           on:change={() => handleFilterCategory(selectedCategory)}
@@ -246,21 +369,6 @@
             <option value={cat}>{cat}</option>
           {/each}
         </select>
-
-        <!-- Year Filter Chips -->
-        <div class="flex items-center bg-slate-100 dark:bg-slate-900 p-1 rounded-xl text-xs font-medium">
-          {#each ["Semua", "2026", "2025"] as year}
-            <button
-              type="button"
-              on:click={() => handleFilterYear(year)}
-              class="px-3 py-1.5 rounded-lg transition-all {selectedYear === year
-                ? 'bg-white dark:bg-slate-800 text-rose-600 font-bold shadow-sm'
-                : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'}"
-            >
-              {year}
-            </button>
-          {/each}
-        </div>
       </div>
     </div>
   </div>
@@ -272,7 +380,7 @@
         <div class="w-8 h-8 border-3 border-rose-600 border-t-transparent rounded-full animate-spin"></div>
         <p class="text-sm font-medium">Memuat data pengeluaran...</p>
       </div>
-    {:else if $expenses.length === 0}
+    {:else if sortedExpenses.length === 0}
       <div class="p-12 text-center text-slate-400 flex flex-col items-center gap-3">
         <Receipt class="w-12 h-12 stroke-1 text-slate-300 dark:text-slate-600" />
         <p class="text-base font-semibold text-slate-600 dark:text-slate-300">Belum ada pengeluaran dicatat</p>
@@ -283,41 +391,57 @@
         <table class="w-full text-left border-collapse">
           <thead>
             <tr class="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-              <th class="py-4 px-6">Tanggal / ID</th>
-              <th class="py-4 px-6">Kategori</th>
-              <th class="py-4 px-6">Deskripsi Pengeluaran</th>
-              <th class="py-4 px-6 text-right">Jumlah (Rp)</th>
+              <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort("tanggal")}>
+                <div class="flex items-center gap-1">
+                  <span>Tanggal / ID</span>
+                  {#if sortKey === "tanggal"}<span class="text-rose-600 font-bold">{sortOrder === "asc" ? "↑" : "↓"}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
+              <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort("kategori")}>
+                <div class="flex items-center gap-1">
+                  <span>Kategori</span>
+                  {#if sortKey === "kategori"}<span class="text-rose-600 font-bold">{sortOrder === "asc" ? "↑" : "↓"}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
+              <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort("deskripsi")}>
+                <div class="flex items-center gap-1">
+                  <span>Deskripsi Pengeluaran</span>
+                  {#if sortKey === "deskripsi"}<span class="text-rose-600 font-bold">{sortOrder === "asc" ? "↑" : "↓"}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
+              <th class="py-4 px-6 text-right cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort("jumlah")}>
+                <div class="flex items-center justify-end gap-1">
+                  <span>Jumlah (Rp)</span>
+                  {#if sortKey === "jumlah"}<span class="text-rose-600 font-bold">{sortOrder === "asc" ? "↑" : "↓"}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+                </div>
+              </th>
               <th class="py-4 px-6 text-center">Aksi</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
-            {#each $expenses as exp}
+            {#each sortedExpenses as exp}
               <tr class="hover:bg-slate-50/60 dark:hover:bg-slate-800/50 transition">
                 <td class="py-4 px-6 font-medium text-slate-900 dark:text-white">
                   <div class="font-bold">{exp.tanggal}</div>
                   <div class="text-[11px] text-slate-400 font-mono">{exp.id}</div>
                 </td>
-
                 <td class="py-4 px-6">
-                  <span class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border {getCategoryColor(exp.kategori)}">
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border {getCategoryColor(exp.kategori)}">
                     {exp.kategori}
                   </span>
                 </td>
-
-                <td class="py-4 px-6 text-slate-700 dark:text-slate-300 max-w-xs truncate">
+                <td class="py-4 px-6 text-slate-700 dark:text-slate-300 font-medium">
                   {exp.deskripsi}
                 </td>
-
-                <td class="py-4 px-6 text-right font-extrabold text-rose-600 dark:text-rose-400">
+                <td class="py-4 px-6 text-right font-extrabold text-slate-900 dark:text-white font-mono">
                   {formatRupiah(exp.jumlah)}
                 </td>
-
                 <td class="py-4 px-6 text-center">
                   <button
                     type="button"
                     on:click={() => (deleteId = exp.id)}
-                    class="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition"
-                    title="Hapus Pengeluaran"
+                    class="p-2 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                    title="Hapus Catatan"
                   >
                     <Trash2 class="w-4 h-4" />
                   </button>
@@ -329,29 +453,26 @@
       </div>
 
       <!-- Pagination Controls -->
-      <div class="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
+      <div class="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/40 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-medium text-slate-500">
         <div>
-          Menampilkan <span class="font-bold text-slate-700 dark:text-slate-300">{$paginationState.from} - {$paginationState.to}</span> dari
-          <span class="font-bold text-slate-700 dark:text-slate-300">{$paginationState.total}</span> pengeluaran
+          Menampilkan <span class="font-bold text-slate-800 dark:text-slate-200">{$paginationState.from}</span> - <span class="font-bold text-slate-800 dark:text-slate-200">{$paginationState.to}</span> dari <span class="font-bold text-slate-800 dark:text-slate-200">{$paginationState.total}</span> data
         </div>
 
         <div class="flex items-center gap-2">
           <button
             type="button"
-            disabled={currentPage <= 1}
+            disabled={currentPage === 1}
             on:click={() => changePage(currentPage - 1)}
-            class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+            class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition"
           >
             <ChevronLeft class="w-4 h-4" />
           </button>
-          <span class="font-semibold text-slate-700 dark:text-slate-300">
-            Halaman {currentPage} / {$paginationState.totalPages || 1}
-          </span>
+          <span>Halaman {currentPage} dari {$paginationState.totalPages}</span>
           <button
             type="button"
-            disabled={currentPage >= $paginationState.totalPages}
+            disabled={currentPage === $paginationState.totalPages}
             on:click={() => changePage(currentPage + 1)}
-            class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+            class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition"
           >
             <ChevronRight class="w-4 h-4" />
           </button>
@@ -359,120 +480,132 @@
       </div>
     {/if}
   </div>
-</div>
 
-<!-- Modal Tambah Pengeluaran -->
-{#if isAddModalOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-700 space-y-6">
-      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-4">
-        <h3 class="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <Receipt class="w-5 h-5 text-rose-600" />
-          Catat Pengeluaran Baru
-        </h3>
-        <button
-          type="button"
-          on:click={() => (isAddModalOpen = false)}
-          class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl"
-        >
-          <X class="w-5 h-5" />
-        </button>
-      </div>
-
-      <form on:submit|preventDefault={handleSubmit} class="space-y-4">
-        <div>
-          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Tanggal Pengeluaran</label>
-          <input
-            type="date"
-            bind:value={formTanggal}
-            required
-            class="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-rose-500/20"
-          />
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Kategori</label>
-          <select
-            bind:value={formKategori}
-            class="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-rose-500/20"
-          >
-            {#each categories as cat}
-              <option value={cat}>{cat}</option>
-            {/each}
-          </select>
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Deskripsi / Keperluan</label>
-          <input
-            type="text"
-            placeholder="Contoh: Beli Deterjen Lavender 50kg, Token Listrik PLN"
-            bind:value={formDeskripsi}
-            required
-            class="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:ring-2 focus:ring-rose-500/20"
-          />
-        </div>
-
-        <div>
-          <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Jumlah Biaya (Rp)</label>
-          <input
-            type="number"
-            min="1000"
-            placeholder="0"
-            bind:value={formJumlah}
-            required
-            class="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold text-rose-600 focus:ring-2 focus:ring-rose-500/20"
-          />
-        </div>
-
-        <div class="pt-4 flex items-center justify-end gap-3 border-t border-slate-100 dark:border-slate-700">
+  <!-- Add Expense Modal -->
+  {#if isAddModalOpen}
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-lg w-full p-6 md:p-8 shadow-2xl border border-slate-100 dark:border-slate-800 space-y-6 relative animate-in fade-in zoom-in duration-200">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2.5">
+            <div class="p-2 bg-rose-50 dark:bg-rose-950/60 text-rose-600 rounded-xl">
+              <Plus class="w-5 h-5" />
+            </div>
+            Tambah Pengeluaran Baru
+          </h2>
           <button
             type="button"
             on:click={() => (isAddModalOpen = false)}
-            class="px-5 py-2.5 text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition"
+            class="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            <X class="w-5 h-5" />
+          </button>
+        </div>
+
+        <form on:submit|preventDefault={handleSubmit} class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Tanggal</label>
+            <input
+              type="date"
+              bind:value={formTanggal}
+              required
+              class="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Kategori</label>
+            <select
+              bind:value={formKategori}
+              required
+              class="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+            >
+              {#each categories as cat}
+                <option value={cat}>{cat}</option>
+              {/each}
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Deskripsi Pengeluaran</label>
+            <textarea
+              bind:value={formDeskripsi}
+              required
+              rows="3"
+              placeholder="Contoh: Beli Deterjen Rinso 10kg & Molto Parfume"
+              class="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+            ></textarea>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">Jumlah Nominal (Rp)</label>
+            <input
+              type="number"
+              bind:value={formJumlah}
+              min="1000"
+              step="1000"
+              required
+              placeholder="Contoh: 250000"
+              class="w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-extrabold font-mono focus:outline-none focus:ring-2 focus:ring-rose-500/20"
+            />
+          </div>
+
+          <div class="pt-4 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              on:click={() => (isAddModalOpen = false)}
+              class="px-5 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={formSubmitting}
+              class="px-5 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:opacity-50 rounded-xl shadow-md shadow-rose-600/20 transition flex items-center gap-2"
+            >
+              {#if formSubmitting}
+                <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Menyimpan...
+              {:else}
+                <Check class="w-4 h-4" />
+                Simpan Catatan
+              {/if}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Delete Modal -->
+  {#if deleteId}
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div class="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 text-center space-y-5 border border-slate-100 dark:border-slate-800 shadow-2xl">
+        <div class="w-12 h-12 bg-rose-100 dark:bg-rose-950/60 text-rose-600 rounded-2xl flex items-center justify-center mx-auto">
+          <AlertCircle class="w-6 h-6" />
+        </div>
+        <div>
+          <h3 class="text-lg font-extrabold text-slate-900 dark:text-white">Hapus Catatan Pengeluaran?</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Catatan pengeluaran ini akan dihapus secara permanen dari Google Sheets. Tindakan ini tidak dapat dibatalkan.
+          </p>
+        </div>
+        <div class="flex items-center justify-center gap-3 pt-2">
+          <button
+            type="button"
+            on:click={() => (deleteId = null)}
+            class="px-5 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition"
           >
             Batal
           </button>
           <button
-            type="submit"
-            disabled={formSubmitting || !formDeskripsi || formJumlah <= 0}
-            class="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-rose-600/20 disabled:opacity-50 transition"
+            type="button"
+            on:click={confirmDelete}
+            class="px-5 py-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl shadow-md transition"
           >
-            {formSubmitting ? "Menyimpan..." : "Simpan Pengeluaran"}
+            Ya, Hapus
           </button>
         </div>
-      </form>
-    </div>
-  </div>
-{/if}
-
-<!-- Modal Confirm Delete -->
-{#if deleteId}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-    <div class="bg-white dark:bg-slate-800 rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 dark:border-slate-700 text-center space-y-4">
-      <div class="w-12 h-12 bg-rose-100 dark:bg-rose-900/30 text-rose-600 rounded-full flex items-center justify-center mx-auto">
-        <AlertCircle class="w-6 h-6" />
-      </div>
-      <h3 class="text-lg font-bold text-slate-900 dark:text-white">Hapus Pengeluaran Ini?</h3>
-      <p class="text-xs text-slate-500 dark:text-slate-400">
-        Tindakan ini akan menghapus catatan pengeluaran secara permanen dari spreadsheet backend.
-      </p>
-      <div class="flex items-center justify-center gap-3 pt-2">
-        <button
-          type="button"
-          on:click={() => (deleteId = null)}
-          class="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-xl transition"
-        >
-          Batal
-        </button>
-        <button
-          type="button"
-          on:click={confirmDelete}
-          class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-sm rounded-xl shadow-lg shadow-rose-600/20 transition"
-        >
-          Hapus Permanen
-        </button>
       </div>
     </div>
-  </div>
-{/if}
+  {/if}
+</div>

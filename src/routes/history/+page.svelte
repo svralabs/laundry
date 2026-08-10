@@ -22,35 +22,66 @@
     Filter
   } from 'lucide-svelte';
 
+  type Timeframe = 'today' | 'week' | 'month' | 'year' | 'all';
+  let selectedTimeframe: Timeframe = 'all';
+
+  const timeframeLabels: Record<Timeframe, string> = {
+    today: 'Hari Ini',
+    week: '7 Hari Terakhir',
+    month: 'Bulan Ini',
+    year: 'Tahun Ini',
+    all: 'Semua Periode'
+  };
+
   let selectedYear = 'Semua';
   let searchInput = '';
   let searchTimeout: any;
 
+  // Sorting State
+  let sortKey = 'invoice';
+  let sortOrder: 'asc' | 'desc' = 'desc';
+
+  function toggleSort(key: string) {
+    if (sortKey === key) {
+      sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortKey = key;
+      sortOrder = 'desc';
+    }
+  }
+
   onMount(() => {
-    loadOrders(1, 10, 'Semua', selectedYear, searchInput);
+    fetchOrders();
   });
+
+  function fetchOrders() {
+    loadOrders(1, 10, 'Semua', selectedYear, searchInput, selectedTimeframe);
+  }
+
+  function handleTimeframeChange(tf: Timeframe) {
+    selectedTimeframe = tf;
+    fetchOrders();
+  }
 
   function selectYear(yr: string) {
     selectedYear = yr;
-    loadOrders(1, 10, 'Semua', selectedYear, searchInput);
+    fetchOrders();
   }
 
   function handleSearchInput() {
     if (searchTimeout) clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
-      loadOrders(1, 10, 'Semua', selectedYear, searchInput);
+      fetchOrders();
     }, 400);
   }
 
   function goToPage(p: number) {
     if (p < 1 || p > $paginationState.totalPages) return;
-    loadOrders(p, 10, 'Semua', selectedYear, searchInput);
+    loadOrders(p, 10, 'Semua', selectedYear, searchInput, selectedTimeframe);
   }
 
   let showDeleteConfirm = false;
   let orderToDeleteId: string | null = null;
-
-
 
   function handleOpenDelete(id: string) {
     orderToDeleteId = id;
@@ -63,9 +94,22 @@
       orderToDeleteId = null;
     }
   }
+
+  $: sortedOrders = [...$orders].sort((a: any, b: any) => {
+    let valA = a[sortKey];
+    let valB = b[sortKey];
+    if (typeof valA === 'number' && typeof valB === 'number') {
+      return sortOrder === 'asc' ? valA - valB : valB - valA;
+    }
+    valA = (valA || '').toString().toLowerCase();
+    valB = (valB || '').toString().toLowerCase();
+    if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+    if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+    return 0;
+  });
 </script>
 
-<div class="space-y-6">
+<div class="space-y-6 max-w-7xl mx-auto">
   <!-- Page Header -->
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
     <div>
@@ -115,17 +159,17 @@
         />
       </div>
 
-      <!-- Year Filter Chips -->
-      <div class="flex items-center gap-2 overflow-x-auto w-full lg:w-auto">
-        <span class="text-xs font-semibold text-slate-400 shrink-0">Filter Tahun:</span>
-        {#each ['Semua', '2026', '2025', '2024'] as yr}
+      <!-- Timeframe Filter Chips -->
+      <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 flex-wrap gap-1">
+        {#each (['today', 'week', 'month', 'year', 'all'] as Timeframe[]) as tf}
           <button
             type="button"
-            on:click={() => selectYear(yr)}
-            class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap
-            {selectedYear === yr ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'}"
+            on:click={() => handleTimeframeChange(tf)}
+            class="px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all {selectedTimeframe === tf
+              ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-white shadow-md'
+              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'}"
           >
-            {yr}
+            {timeframeLabels[tf]}
           </button>
         {/each}
       </div>
@@ -138,13 +182,48 @@
       <table class="w-full text-left border-collapse">
         <thead>
           <tr class="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-            <th class="py-4 px-6">Nomor Nota</th>
-            <th class="py-4 px-6">Tanggal</th>
-            <th class="py-4 px-6">Customer</th>
-            <th class="py-4 px-6">Layanan</th>
-            <th class="py-4 px-6">Berat</th>
-            <th class="py-4 px-6">Total Bayar</th>
-            <th class="py-4 px-6">Status</th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('invoice')}>
+              <div class="flex items-center gap-1">
+                <span>Nomor Nota</span>
+                {#if sortKey === 'invoice'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('tanggal')}>
+              <div class="flex items-center gap-1">
+                <span>Tanggal</span>
+                {#if sortKey === 'tanggal'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('customer_nama')}>
+              <div class="flex items-center gap-1">
+                <span>Customer</span>
+                {#if sortKey === 'customer_nama'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('service_nama')}>
+              <div class="flex items-center gap-1">
+                <span>Layanan</span>
+                {#if sortKey === 'service_nama'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('berat')}>
+              <div class="flex items-center gap-1">
+                <span>Berat</span>
+                {#if sortKey === 'berat'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('total')}>
+              <div class="flex items-center gap-1">
+                <span>Total Bayar</span>
+                {#if sortKey === 'total'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
+            <th class="py-4 px-6 cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-200" on:click={() => toggleSort('status')}>
+              <div class="flex items-center gap-1">
+                <span>Status</span>
+                {#if sortKey === 'status'}<span class="text-blue-600 font-bold">{sortOrder === 'asc' ? '↑' : '↓'}</span>{:else}<span class="text-slate-300">↕</span>{/if}
+              </div>
+            </th>
             <th class="py-4 px-6 text-right">Aksi</th>
           </tr>
         </thead>
@@ -152,88 +231,86 @@
           {#if $isLoading}
             <TableRowSkeleton cols={8} rows={6} />
           {:else}
-            {#each $orders as ord}
-            <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group">
-              <td class="py-4 px-6 font-mono font-bold text-blue-600 dark:text-blue-400">
-                {ord.invoice}
-              </td>
-              <td class="py-4 px-6 text-slate-600 dark:text-slate-400">
-                {formatDateShort(ord.tanggal)}
-              </td>
-              <td class="py-4 px-6 font-bold text-slate-800 dark:text-slate-100">
-                {ord.customer_nama || 'Umum'}
-              </td>
-              <td class="py-4 px-6 text-slate-600 dark:text-slate-300">
-                {ord.service_nama || 'Cuci Komplit'}
-              </td>
-              <td class="py-4 px-6 font-semibold text-slate-700 dark:text-slate-200">
-                {ord.berat} Kg
-              </td>
-              <td class="py-4 px-6 font-extrabold text-slate-900 dark:text-white">
-                {formatRupiah(ord.total)}
-              </td>
-              <td class="py-4 px-6">
-                <StatusBadge status={ord.status} size="sm" />
-              </td>
-              <td class="py-4 px-6 text-right">
-                <div class="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    on:click={() => generateOrderPDF(ord)}
-                    class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 rounded-xl transition"
-                    title="Cetak Struk PDF"
-                  >
-                    <Printer class="w-4 h-4" />
-                  </button>
+            {#each sortedOrders as ord}
+              <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group">
+                <td class="py-4 px-6 font-mono font-bold text-blue-600 dark:text-blue-400">
+                  {ord.invoice}
+                </td>
+                <td class="py-4 px-6 text-slate-600 dark:text-slate-400">
+                  {formatDateShort(ord.tanggal)}
+                </td>
+                <td class="py-4 px-6 font-bold text-slate-800 dark:text-slate-100">
+                  {ord.customer_nama || 'Umum'}
+                </td>
+                <td class="py-4 px-6 text-slate-600 dark:text-slate-300">
+                  {ord.service_nama || 'Cuci Komplit'}
+                </td>
+                <td class="py-4 px-6 font-semibold text-slate-700 dark:text-slate-200">
+                  {ord.berat} Kg
+                </td>
+                <td class="py-4 px-6 font-extrabold text-slate-900 dark:text-white">
+                  {formatRupiah(ord.total)}
+                </td>
+                <td class="py-4 px-6">
+                  <StatusBadge status={ord.status} size="sm" />
+                </td>
+                <td class="py-4 px-6 text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      on:click={() => generateOrderPDF(ord)}
+                      class="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950 rounded-xl transition"
+                      title="Cetak Struk PDF"
+                    >
+                      <Printer class="w-4 h-4" />
+                    </button>
 
-                  <button
-                    type="button"
-                    on:click={() => handleOpenDelete(ord.id)}
-                    class="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition"
-                    title="Hapus Order"
-                  >
-                    <Trash2 class="w-4 h-4" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          {:else}
-            <tr>
-              <td colspan="8" class="py-12 text-center text-slate-400 text-sm">
-                Belum ada data riwayat transaksi yang sesuai.
-              </td>
-            </tr>
-          {/each}
+                    <button
+                      type="button"
+                      on:click={() => handleOpenDelete(ord.id)}
+                      class="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950 rounded-xl transition"
+                      title="Hapus Order"
+                    >
+                      <Trash2 class="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            {:else}
+              <tr>
+                <td colspan="8" class="py-12 text-center text-slate-400">
+                  Tidak ada transaksi laundry ditemukan.
+                </td>
+              </tr>
+            {/each}
           {/if}
         </tbody>
       </table>
     </div>
 
-    <!-- Pagination Controls -->
-    <div class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+    <!-- Pagination Footer -->
+    <div class="px-6 py-4 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-slate-500">
       <div>
-        Menampilkan <strong class="text-slate-800 dark:text-white">{$paginationState.from} - {$paginationState.to}</strong> dari total <strong class="text-slate-800 dark:text-white">{$paginationState.total}</strong> transaksi
+        Menampilkan {$paginationState.from} - {$paginationState.to} dari {$paginationState.total} transaksi
       </div>
 
       <div class="flex items-center gap-2">
         <button
           type="button"
-          disabled={$paginationState.page <= 1 || $isLoading}
           on:click={() => goToPage($paginationState.page - 1)}
-          class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-          title="Halaman Sebelumnya"
+          disabled={$paginationState.page <= 1 || $isLoading}
+          class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 disabled:opacity-40 transition"
         >
           <ChevronLeft class="w-4 h-4" />
         </button>
-        <span class="font-bold text-slate-800 dark:text-slate-200 px-2">
-          Halaman {$paginationState.page} / {$paginationState.totalPages}
-        </span>
+
+        <span>Halaman {$paginationState.page} dari {$paginationState.totalPages}</span>
+
         <button
           type="button"
-          disabled={$paginationState.page >= $paginationState.totalPages || $isLoading}
           on:click={() => goToPage($paginationState.page + 1)}
-          class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-          title="Halaman Selanjutnya"
+          disabled={$paginationState.page >= $paginationState.totalPages || $isLoading}
+          class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 disabled:opacity-40 transition"
         >
           <ChevronRight class="w-4 h-4" />
         </button>
@@ -242,11 +319,11 @@
   </div>
 </div>
 
-<!-- Confirm Delete Modal -->
 <ConfirmModal
   bind:show={showDeleteConfirm}
-  title="Hapus Transaksi Laundry"
-  message="Apakah Anda meyakini penghapusan nota laundry ini? Data transaksi yang terhapus tidak dapat dikembalikan."
+  title="Hapus Order Laundry?"
+  message="Order ini akan dihapus permanen dari sistem. Yakin ingin melanjutkan?"
+  confirmText="Ya, Hapus"
+  cancelText="Batal"
   onConfirm={confirmDeleteAction}
-  onClose={() => (showDeleteConfirm = false)}
 />
