@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dashboardStats, loadDashboardStats, loadOrders, orders, isLoading } from "$stores/laundryStore";
+  import { dashboardStats, loadDashboardStats, loadOrders, orders, isLoading, timeframeFilter, type TimeframeFilter } from "$stores/laundryStore";
   import StatCard from "$components/StatCard.svelte";
   import StatusBadge from "$components/StatusBadge.svelte";
   import StepProgress from "$components/StepProgress.svelte";
@@ -23,8 +23,11 @@
     FileText,
   } from "lucide-svelte";
 
-  type Timeframe = 'today' | 'week' | 'month' | 'year';
-  let activeTimeframe: Timeframe = 'today';
+  $: activeTimeframe = ($timeframeFilter === 'all' ? 'month' : $timeframeFilter) as 'today' | 'week' | 'month' | 'year';
+
+  $: {
+    loadDashboardStats(activeTimeframe);
+  }
 
   let sortKey = 'invoice';
   let sortOrder: 'asc' | 'desc' = 'desc';
@@ -38,22 +41,17 @@
     }
   }
 
-  const timeframeLabels: Record<Timeframe, string> = {
+  const timeframeLabels: Record<string, string> = {
     today: 'Hari Ini',
     week: '7 Hari Terakhir',
     month: 'Bulan Ini',
-    year: 'Tahun Ini'
+    year: 'Tahun Ini',
+    all: 'Semua'
   };
 
   onMount(() => {
-    loadDashboardStats(activeTimeframe);
     loadOrders(1, 5);
   });
-
-  function setTimeframe(tf: Timeframe) {
-    activeTimeframe = tf;
-    loadDashboardStats(tf);
-  }
 
   $: chartItems = $dashboardStats.chartData || [];
   $: maxOrders = Math.max(1, ...chartItems.map((d) => d.orders));
@@ -120,23 +118,6 @@
       <h2 class="text-sm font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
         Statistik Usaha
       </h2>
-      <div class="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-2xl shadow-sm">
-        {#each [
-          { id: 'today', label: 'Hari Ini' },
-          { id: 'week', label: 'Minggu Ini' },
-          { id: 'month', label: 'Bulan Ini' },
-          { id: 'year', label: 'Tahun Ini' }
-        ] as tf}
-          <button
-            type="button"
-            on:click={() => setTimeframe(tf.id as Timeframe)}
-            class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all
-            {activeTimeframe === tf.id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}"
-          >
-            {tf.label}
-          </button>
-        {/each}
-      </div>
     </div>
 
     <div

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { profitLoss, isLoading, loadProfitLoss } from "$stores/laundryStore";
+  import { profitLoss, isLoading, loadProfitLoss, timeframeFilter } from "$stores/laundryStore";
   import {
     TrendingUp,
     TrendingDown,
@@ -19,14 +19,18 @@
     Equal
   } from "lucide-svelte";
 
-  type Timeframe = "today" | "week" | "month" | "year";
-  let activeTimeframe: Timeframe = "month";
+  $: activeTimeframe = ($timeframeFilter === 'all' ? 'year' : $timeframeFilter) as 'today' | 'week' | 'month' | 'year';
 
-  const timeframeLabels: Record<Timeframe, string> = {
+  $: {
+    loadProfitLoss(activeTimeframe);
+  }
+
+  const timeframeLabels: Record<string, string> = {
     today: "Hari Ini",
     week: "7 Hari Terakhir",
     month: "Bulan Ini",
-    year: "Tahun Ini"
+    year: "Tahun Ini",
+    all: "Semua"
   };
 
   let sortKey = "amount";
@@ -39,19 +43,6 @@
       sortKey = key;
       sortOrder = "desc";
     }
-  }
-
-  onMount(() => {
-    fetchData();
-  });
-
-  function fetchData() {
-    loadProfitLoss(activeTimeframe);
-  }
-
-  function handleTimeframeChange(tf: Timeframe) {
-    activeTimeframe = tf;
-    loadProfitLoss(tf);
   }
 
   function formatRupiah(num: number) {
@@ -118,20 +109,6 @@
       </p>
     </div>
 
-    <!-- Timeframe Filter Chips -->
-    <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 flex-wrap gap-1">
-      {#each (['today', 'week', 'month', 'year'] as Timeframe[]) as tf}
-        <button
-          type="button"
-          on:click={() => handleTimeframeChange(tf)}
-          class="px-4 py-2 text-xs font-bold rounded-xl transition-all {activeTimeframe === tf
-            ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-white shadow-md'
-            : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'}"
-        >
-          {timeframeLabels[tf]}
-        </button>
-      {/each}
-    </div>
   </div>
 
   {#if $isLoading || !$profitLoss}

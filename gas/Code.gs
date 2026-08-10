@@ -434,10 +434,14 @@ function getPagedCustomers(page, pageSize, q) {
   };
 }
 
-function getPagedExpenses(page, pageSize, q, categoryFilter, yearFilter, timeframe) {
-  page = page || 1;
-  pageSize = pageSize || 10;
+function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timeframe) {
+  page = parseInt(page, 10) || 1;
+  pageSize = parseInt(pageSize, 10) || 10;
+  categoryFilter = categoryFilter || 'Semua';
+  yearFilter = yearFilter || 'Semua';
+  q = q || '';
   timeframe = timeframe || 'all';
+
   var sheet = getOrCreateSheet('expenses');
   var lastRow = sheet.getLastRow();
 
@@ -463,11 +467,7 @@ function getPagedExpenses(page, pageSize, q, categoryFilter, yearFilter, timefra
   var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
   var data = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
 
-  var today = new Date().toISOString().slice(0, 10);
-  var now = new Date();
-  var currMonth = today.slice(0, 7);
-  var currYear = now.getFullYear().toString();
-
+  var todayStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
   var filtered = [];
   var qLower = q ? q.toLowerCase() : '';
   var totalCountInTimeframe = 0;
@@ -485,19 +485,7 @@ function getPagedExpenses(page, pageSize, q, categoryFilter, yearFilter, timefra
     var amount = parseFloat(obj['jumlah']) || 0;
     var cat = obj['kategori'] || 'Operasional & Lain-lain';
 
-    var inTimeframe = true;
-    if (timeframe === 'today') {
-      inTimeframe = (tDate === today);
-    } else if (timeframe === 'week') {
-      var diffDays = (now.getTime() - new Date(tDate).getTime()) / 86400000;
-      inTimeframe = (diffDays >= 0 && diffDays <= 7);
-    } else if (timeframe === 'month') {
-      inTimeframe = (tDate.slice(0, 7) === currMonth);
-    } else if (timeframe === 'year') {
-      inTimeframe = (tDate.slice(0, 4) === currYear);
-    }
-
-    if (inTimeframe) {
+    if (isDateInTimeframe(tDate, timeframe, todayStr)) {
       totalCountInTimeframe++;
       totalExpenseFiltered += amount;
       if (byCategory[cat] !== undefined) {
@@ -508,9 +496,8 @@ function getPagedExpenses(page, pageSize, q, categoryFilter, yearFilter, timefra
 
       var matchesQ = !qLower || (obj['deskripsi'] || '').toString().toLowerCase().indexOf(qLower) !== -1 || cat.toLowerCase().indexOf(qLower) !== -1;
       var matchesCat = !categoryFilter || categoryFilter === 'Semua' || cat === categoryFilter;
-      var matchesYear = !yearFilter || yearFilter === 'Semua' || tDate.slice(0, 4) === yearFilter.toString();
 
-      if (matchesQ && matchesCat && matchesYear) {
+      if (matchesQ && matchesCat) {
         filtered.push(obj);
       }
     }
@@ -545,10 +532,9 @@ function getPagedExpenses(page, pageSize, q, categoryFilter, yearFilter, timefra
 
 function getProfitLossData(timeframe, monthFilter, yearFilter) {
   timeframe = timeframe || 'month';
-  var now = new Date();
-  var today = now.toISOString().slice(0, 10);
-  var currYear = (yearFilter || now.getFullYear()).toString();
-  var currMonthStr = monthFilter || today.slice(0, 7);
+  var todayStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
+  var currYear = (yearFilter || todayStr.slice(0, 4)).toString();
+  var currMonthStr = monthFilter || todayStr.slice(0, 7);
 
   return getCachedData('profit_loss_v2_' + timeframe + '_' + currMonthStr + '_' + currYear, function() {
     var ordSheet = getOrCreateSheet('orders');
@@ -593,19 +579,7 @@ function getProfitLossData(timeframe, monthFilter, yearFilter) {
           if (mIdx >= 0 && mIdx < 12) monthlyData[mIdx].revenue += total;
         }
 
-        var inPeriodRev = false;
-        if (timeframe === 'today') {
-          inPeriodRev = (tDate === today);
-        } else if (timeframe === 'week') {
-          var diffDaysR = (now.getTime() - new Date(tDate).getTime()) / 86400000;
-          inPeriodRev = (diffDaysR >= 0 && diffDaysR <= 7);
-        } else if (timeframe === 'month') {
-          inPeriodRev = (tDate.slice(0, 7) === currMonthStr);
-        } else if (timeframe === 'year') {
-          inPeriodRev = (tDate.slice(0, 4) === currYear);
-        }
-
-        if (inPeriodRev) {
+        if (isDateInTimeframe(tDate, timeframe, todayStr)) {
           totalRevenue += total;
         }
       }
@@ -632,19 +606,7 @@ function getProfitLossData(timeframe, monthFilter, yearFilter) {
           if (mIdx >= 0 && mIdx < 12) monthlyData[mIdx].expenses += amount;
         }
 
-        var inPeriodExp = false;
-        if (timeframe === 'today') {
-          inPeriodExp = (eDate === today);
-        } else if (timeframe === 'week') {
-          var diffDaysE = (now.getTime() - new Date(eDate).getTime()) / 86400000;
-          if (diffDaysE >= 0 && diffDaysE <= 7) inPeriodExp = true;
-        } else if (timeframe === 'month') {
-          inPeriodExp = (eDate.slice(0, 7) === currMonthStr);
-        } else if (timeframe === 'year') {
-          inPeriodExp = (eDate.slice(0, 4) === currYear);
-        }
-
-        if (inPeriodExp) {
+        if (isDateInTimeframe(eDate, timeframe, todayStr)) {
           totalExpenses += amount;
           if (breakdownKategori[cat] !== undefined) {
             breakdownKategori[cat] += amount;

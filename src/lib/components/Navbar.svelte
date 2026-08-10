@@ -4,28 +4,42 @@
     globalSearch,
     isLoading,
     loadDataFromGAS,
+    timeframeFilter,
+    type TimeframeFilter,
+    loadDashboardStats,
+    loadExpenses,
+    loadProfitLoss,
+    loadOrders
   } from "$stores/laundryStore";
-  import { formatDate } from "$utils/formatters";
+  import { page } from "$app/stores";
   import { env } from '$env/dynamic/public';
   import {
     Menu,
     Search,
     Plus,
     RefreshCw,
-    Calendar,
     Moon,
     Sun,
-    Bell,
-    CheckCircle2,
+    Calendar
   } from "lucide-svelte";
   import { onMount } from "svelte";
 
   export let mobileOpen = false;
 
   let isDarkMode = false;
-  let todayFormatted = formatDate(new Date(), " DD MMMM YYYY");
-  
   const publicGasUrl = env.PUBLIC_GAS_URL || '';
+
+  $: currentPath = $page.url.pathname as string;
+  $: showTimeframeFilter = ["/", "/expenses", "/profit-loss", "/history"].includes(currentPath);
+  $: showAllOption = ["/expenses", "/history"].includes(currentPath);
+
+  const timeframeLabels: Record<TimeframeFilter, string> = {
+    today: "Hari Ini",
+    week: "7 Hari",
+    month: "Bulan Ini",
+    year: "Tahun Ini",
+    all: "Semua"
+  };
 
   onMount(() => {
     isDarkMode = document.documentElement.classList.contains("dark");
@@ -39,13 +53,26 @@
       document.documentElement.classList.remove("dark");
     }
   }
+
+  function setTimeframe(tf: TimeframeFilter) {
+    timeframeFilter.set(tf);
+    if (currentPath === "/") {
+      loadDashboardStats(tf);
+    } else if (currentPath === "/expenses") {
+      loadExpenses(1, 10, "Semua", "Semua", "", tf);
+    } else if (currentPath === "/profit-loss") {
+      loadProfitLoss(tf);
+    } else if (currentPath === "/history") {
+      loadOrders(1, 10, "Semua", "Semua", "", tf);
+    }
+  }
 </script>
 
 <header
-  class="h-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 px-4 sm:px-8 flex items-center justify-between shadow-sm"
+  class="h-20 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-30 px-4 sm:px-8 flex items-center justify-between shadow-sm gap-3"
 >
-  <div class="flex items-center gap-3 lg:gap-4">
-    <!-- Mobile Hamburger Toggle -->
+  <!-- Mobile Hamburger Toggle -->
+  <div class="flex items-center gap-2">
     <button
       type="button"
       on:click={() => (mobileOpen = !mobileOpen)}
@@ -54,39 +81,10 @@
     >
       <Menu class="w-6 h-6" />
     </button>
-
-    <!-- Laundry Name & Date -->
-    <div class="hidden sm:flex items-center gap-3">
-      <img
-        src="/logo.png"
-        alt="SVRA Laundry Logo"
-        class="w-9 h-9 rounded-xl object-cover shadow-sm border border-slate-200 dark:border-slate-800"
-      />
-      <div>
-        <h2
-          class="text-base font-extrabold text-slate-800 dark:text-white tracking-tight flex items-center gap-2"
-        >
-          {$settings.nama_laundry || "SVRA Laundry"}
-          {#if publicGasUrl}
-            <span
-              class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
-            >
-              <CheckCircle2 class="w-3 h-3" /> GAS Cloud Live
-            </span>
-          {/if}
-        </h2>
-        <p
-          class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 font-medium mt-0.5"
-        >
-          <Calendar class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-          {todayFormatted}
-        </p>
-      </div>
-    </div>
   </div>
 
   <!-- Global Search Input -->
-  <div class="flex-1 max-w-md mx-4">
+  <div class="flex-1 max-w-md mx-2 sm:mx-4">
     <div class="relative">
       <Search
         class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"
@@ -100,7 +98,7 @@
     </div>
   </div>
 
-  <!-- Actions & User Profile -->
+  <!-- Actions & Global Filters -->
   <div class="flex items-center gap-2 sm:gap-3">
     <!-- GAS Sync Button -->
     {#if publicGasUrl}
@@ -115,6 +113,34 @@
           class="w-5 h-5 {$isLoading ? 'animate-spin text-blue-600' : ''}"
         />
       </button>
+    {/if}
+
+    <!-- Global Timeframe Filter Selector (Next to Refresh Button) -->
+    {#if showTimeframeFilter}
+      <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold gap-0.5">
+        {#each (['today', 'week', 'month', 'year'] as TimeframeFilter[]) as tf}
+          <button
+            type="button"
+            on:click={() => setTimeframe(tf)}
+            class="px-2.5 py-1 rounded-lg transition-all {$timeframeFilter === tf
+              ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-white shadow-sm font-extrabold'
+              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'}"
+          >
+            {timeframeLabels[tf]}
+          </button>
+        {/each}
+        {#if showAllOption}
+          <button
+            type="button"
+            on:click={() => setTimeframe('all')}
+            class="px-2.5 py-1 rounded-lg transition-all {$timeframeFilter === 'all'
+              ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-white shadow-sm font-extrabold'
+              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'}"
+          >
+            Semua
+          </button>
+        {/if}
+      </div>
     {/if}
 
     <!-- Dark Mode Toggle -->

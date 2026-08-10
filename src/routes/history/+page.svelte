@@ -1,6 +1,5 @@
-<!-- ==================== HALAMAN RIWAYAT & LAPORAN LAUNDRY ==================== -->
 <script lang="ts">
-  import { orders, deleteOrder, paginationState, loadOrders, isLoading } from '$stores/laundryStore';
+  import { orders, deleteOrder, paginationState, loadOrders, isLoading, timeframeFilter, type TimeframeFilter } from '$stores/laundryStore';
   import TableRowSkeleton from '$lib/components/skeletons/TableRowSkeleton.svelte';
   import type { Order } from '$types/laundry';
   import StatusBadge from '$components/StatusBadge.svelte';
@@ -22,10 +21,9 @@
     Filter
   } from 'lucide-svelte';
 
-  type Timeframe = 'today' | 'week' | 'month' | 'year' | 'all';
-  let selectedTimeframe: Timeframe = 'all';
+  $: selectedTimeframe = $timeframeFilter;
 
-  const timeframeLabels: Record<Timeframe, string> = {
+  const timeframeLabels: Record<string, string> = {
     today: 'Hari Ini',
     week: '7 Hari Terakhir',
     month: 'Bulan Ini',
@@ -36,6 +34,12 @@
   let selectedYear = 'Semua';
   let searchInput = '';
   let searchTimeout: any;
+
+  $: {
+    if (selectedTimeframe || selectedYear || searchInput) {
+      fetchOrders();
+    }
+  }
 
   // Sorting State
   let sortKey = 'invoice';
@@ -56,11 +60,6 @@
 
   function fetchOrders() {
     loadOrders(1, 10, 'Semua', selectedYear, searchInput, selectedTimeframe);
-  }
-
-  function handleTimeframeChange(tf: Timeframe) {
-    selectedTimeframe = tf;
-    fetchOrders();
   }
 
   function selectYear(yr: string) {
@@ -159,20 +158,6 @@
         />
       </div>
 
-      <!-- Timeframe Filter Chips -->
-      <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-1.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 flex-wrap gap-1">
-        {#each (['today', 'week', 'month', 'year', 'all'] as Timeframe[]) as tf}
-          <button
-            type="button"
-            on:click={() => handleTimeframeChange(tf)}
-            class="px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all {selectedTimeframe === tf
-              ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-white shadow-md'
-              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400'}"
-          >
-            {timeframeLabels[tf]}
-          </button>
-        {/each}
-      </div>
     </div>
   </div>
 

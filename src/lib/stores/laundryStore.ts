@@ -45,6 +45,21 @@ export const statusSummary = writable<StatusSummaryData>({
   ongoingTotal: 0
 });
 
+export type TimeframeFilter = 'today' | 'week' | 'month' | 'year' | 'all';
+
+const initialTimeframe = (typeof window !== 'undefined' && localStorage.getItem('svra_timeframe_filter')) as TimeframeFilter || 'today';
+export const timeframeFilter = writable<TimeframeFilter>(initialTimeframe);
+
+if (typeof window !== 'undefined') {
+  timeframeFilter.subscribe((tf) => {
+    if (tf) {
+      try {
+        localStorage.setItem('svra_timeframe_filter', tf);
+      } catch (e) {}
+    }
+  });
+}
+
 export const expenses = writable<Expense[]>([]);
 export const expensesSummary = writable<ExpensesSummary>({
   totalExpenses: 0,
@@ -116,11 +131,12 @@ export const stats = derived([orders, customers], ([$orders, $customers]) => {
   };
 });
 
-export async function loadDashboardStats(timeframe: 'today' | 'week' | 'month' | 'year' = 'today') {
+export async function loadDashboardStats(timeframe?: TimeframeFilter) {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  const tf = timeframe || get(timeframeFilter) || 'today';
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<DashboardStatsData>(PUBLIC_GAS_URL, 'getDashboardStats', { timeframe });
+    const res = await fetchFromGAS<DashboardStatsData>(PUBLIC_GAS_URL, 'getDashboardStats', { timeframe: tf });
     if (res.success && res.data) {
       dashboardStats.set(res.data);
     }
@@ -170,11 +186,12 @@ export async function loadCustomers(page = 1, pageSize = 10, q = '') {
   }
 }
 
-export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe = 'all') {
+export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe?: TimeframeFilter) {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  const tf = timeframe || get(timeframeFilter) || 'all';
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, statusFilter, yearFilter, q, timeframe });
+    const res = await fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, statusFilter, yearFilter, q, timeframe: tf });
     if (res.success && Array.isArray(res.data)) {
       orders.set(res.data);
       if (res.meta) {
@@ -197,11 +214,12 @@ export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua'
   }
 }
 
-export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe = 'all') {
+export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Semua', yearFilter = 'Semua', q = '', timeframe?: TimeframeFilter) {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  const tf = timeframe || get(timeframeFilter) || 'all';
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Expense[]>(PUBLIC_GAS_URL, 'getExpenses', { page, pageSize, categoryFilter, yearFilter, q, timeframe });
+    const res = await fetchFromGAS<Expense[]>(PUBLIC_GAS_URL, 'getExpenses', { page, pageSize, categoryFilter, yearFilter, q, timeframe: tf });
     if (res.success && Array.isArray(res.data)) {
       expenses.set(res.data);
       if (res.meta) {
@@ -268,11 +286,13 @@ export async function deleteExpense(id: string) {
   return false;
 }
 
-export async function loadProfitLoss(timeframe: 'today' | 'week' | 'month' | 'year' = 'month', monthFilter = '', yearFilter = '') {
+export async function loadProfitLoss(timeframe?: TimeframeFilter, monthFilter = '', yearFilter = '') {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  let tf = timeframe || get(timeframeFilter) || 'month';
+  if (tf === 'all') tf = 'year';
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<any>(PUBLIC_GAS_URL, 'getProfitLoss', { timeframe, monthFilter, yearFilter });
+    const res = await fetchFromGAS<any>(PUBLIC_GAS_URL, 'getProfitLoss', { timeframe: tf, monthFilter, yearFilter });
     if (res && res.success && res.data) {
       profitLoss.set(res.data);
     } else if (res && (res as any).totalRevenue !== undefined) {
