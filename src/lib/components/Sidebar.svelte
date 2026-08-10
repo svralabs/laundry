@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/stores";
-  import { settings, stats } from "$stores/laundryStore";
+  import { settings, stats, statusSummary } from "$stores/laundryStore";
   import {
     LayoutDashboard,
     Users,
@@ -107,7 +107,7 @@
             <span
               class="px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-amber-400 text-slate-900 shadow-sm"
             >
-              {$stats.sedangDicuci}
+              {$statusSummary.ongoingTotal}
             </span>
           {:else if item.badge}
             <span

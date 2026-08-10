@@ -1,5 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
-import type { Customer, Order, Service, Settings, OrderStatus, ToastMessage, CapacityStatus } from '$types/laundry';
+import type { Customer, Order, Service, Settings, OrderStatus, ToastMessage, CapacityStatus, DashboardStatsData, StatusSummaryData } from '$types/laundry';
 import { generateInvoiceNumber } from '$utils/formatters';
 import { fetchFromGAS, postToGAS } from '$services/api';
 import { env } from '$env/dynamic/public'; // Using dynamic to ensure it reads from process.env on server if needed, or static
@@ -26,13 +26,34 @@ export const isLoading = writable<boolean>(false);
 export const globalSearch = writable<string>('');
 export const capacityStatus = writable<CapacityStatus | null>(null);
 
+export const dashboardStats = writable<DashboardStatsData>({
+  totalCustomers: 0,
+  todayOrders: 0,
+  sedangDicuci: 0,
+  siapDiambil: 0,
+  pendapatanHariIni: 0,
+  pendapatanPeriod: 0
+});
+
+export const statusSummary = writable<StatusSummaryData>({
+  Semua: 0,
+  Masuk: 0,
+  Dicuci: 0,
+  Disetrika: 0,
+  Selesai: 0,
+  Diambil: 0,
+  ongoingTotal: 0
+});
+
 export const paginationState = writable({
   page: 1,
-  pageSize: 50,
+  pageSize: 10,
   total: 0,
-  totalPages: 0,
+  totalPages: 1,
+  from: 0,
+  to: 0,
   isLoadingMore: false,
-  hasMore: true
+  hasMore: false
 });
 
 // Purge any residual LocalStorage data
@@ -85,64 +106,98 @@ export const stats = derived([orders, customers], ([$orders, $customers]) => {
   };
 });
 
-// Fetch all data from GAS API (Initial Load)
-export async function loadDataFromGAS(page = 1, pageSize = 50, append = false, query = '') {
-  if (typeof window === 'undefined') return;
-  if (!PUBLIC_GAS_URL) {
-    console.warn('PUBLIC_GAS_URL is not configured.');
-    return;
-  }
-
-  if (append) {
-    paginationState.update(s => ({ ...s, isLoadingMore: true }));
-  } else {
-    isLoading.set(true);
-  }
-
+export async function loadDashboardStats(timeframe: 'today' | 'week' | 'month' | 'year' = 'today') {
+  if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   try {
-    const needServices = get(services).length === 0;
-    const needSettings = !get(capacityStatus);
-
-    const promises: Promise<any>[] = [
-      fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page: 1, pageSize: 200, q: query }),
-      fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, q: query })
-    ];
-
-    if (needServices) promises.push(fetchFromGAS<Service[]>(PUBLIC_GAS_URL, 'getServices'));
-    if (needSettings) promises.push(fetchFromGAS<Settings[]>(PUBLIC_GAS_URL, 'getSettings'));
-
-    const results = await Promise.allSettled(promises);
-    const custRes = results[0];
-    const ordRes = results[1];
-    let srvRes = needServices ? results[2] : null;
-    let setRes = needSettings ? (needServices ? results[3] : results[2]) : null;
-
-    if (custRes.status === 'fulfilled' && custRes.value.success && Array.isArray(custRes.value.data)) {
-      customers.set(custRes.value.data);
+    const res = await fetchFromGAS<DashboardStatsData>(PUBLIC_GAS_URL, 'getDashboardStats', { timeframe });
+    if (res.success && res.data) {
+      dashboardStats.set(res.data);
     }
-    if (srvRes && srvRes.status === 'fulfilled' && srvRes.value.success && Array.isArray(srvRes.value.data)) {
-      services.set(srvRes.value.data);
+  } catch (e) {
+    console.error('[GAS API] Failed to load dashboard stats:', e);
+  }
+}
+
+export async function loadStatusSummary() {
+  if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  try {
+    const res = await fetchFromGAS<StatusSummaryData>(PUBLIC_GAS_URL, 'getStatusSummary');
+    if (res.success && res.data) {
+      statusSummary.set(res.data);
     }
-    if (ordRes.status === 'fulfilled' && ordRes.value.success && Array.isArray(ordRes.value.data)) {
-      if (append) {
-        orders.update(existing => [...existing, ...(ordRes.value.data as Order[])]);
-      } else {
-        orders.set(ordRes.value.data);
-      }
-      
-      const meta = ordRes.value.meta;
-      if (meta && meta.page !== undefined && meta.pageSize !== undefined && meta.total !== undefined && meta.totalPages !== undefined) {
+  } catch (e) {
+    console.error('[GAS API] Failed to load status summary:', e);
+  }
+}
+
+export async function loadCustomers(page = 1, pageSize = 10, q = '') {
+  if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  isLoading.set(true);
+  try {
+    const res = await fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page, pageSize, q });
+    if (res.success && Array.isArray(res.data)) {
+      customers.set(res.data);
+      if (res.meta) {
         paginationState.set({
-          page: meta.page,
-          pageSize: meta.pageSize,
-          total: meta.total,
-          totalPages: meta.totalPages,
+          page: res.meta.page || page,
+          pageSize: res.meta.pageSize || pageSize,
+          total: res.meta.total || 0,
+          totalPages: res.meta.totalPages || 1,
+          from: res.meta.from || 0,
+          to: res.meta.to || 0,
           isLoadingMore: false,
-          hasMore: meta.page < meta.totalPages
+          hasMore: false
         });
       }
     }
-    if (setRes && setRes.status === 'fulfilled' && setRes.value.success) {
+  } catch (e) {
+    console.error('[GAS API] Failed to load customers:', e);
+  } finally {
+    isLoading.set(false);
+  }
+}
+
+export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua', yearFilter = 'Semua', q = '') {
+  if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  isLoading.set(true);
+  try {
+    const res = await fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page, pageSize, statusFilter, yearFilter, q });
+    if (res.success && Array.isArray(res.data)) {
+      orders.set(res.data);
+      if (res.meta) {
+        paginationState.set({
+          page: res.meta.page || page,
+          pageSize: res.meta.pageSize || pageSize,
+          total: res.meta.total || 0,
+          totalPages: res.meta.totalPages || 1,
+          from: res.meta.from || 0,
+          to: res.meta.to || 0,
+          isLoadingMore: false,
+          hasMore: false
+        });
+      }
+    }
+  } catch (e) {
+    console.error('[GAS API] Failed to load orders:', e);
+  } finally {
+    isLoading.set(false);
+  }
+}
+
+// Initial Load Handler
+export async function loadDataFromGAS() {
+  if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
+  isLoading.set(true);
+  try {
+    const [srvRes, setRes] = await Promise.allSettled([
+      fetchFromGAS<Service[]>(PUBLIC_GAS_URL, 'getServices'),
+      fetchFromGAS<Settings[]>(PUBLIC_GAS_URL, 'getSettings')
+    ]);
+
+    if (srvRes.status === 'fulfilled' && srvRes.value.success && Array.isArray(srvRes.value.data)) {
+      services.set(srvRes.value.data);
+    }
+    if (setRes.status === 'fulfilled' && setRes.value.success) {
       if (Array.isArray(setRes.value.data) && setRes.value.data.length > 0) {
         settings.set(setRes.value.data[0]);
       }
@@ -150,42 +205,17 @@ export async function loadDataFromGAS(page = 1, pageSize = 50, append = false, q
         capacityStatus.set(setRes.value.meta.capacity);
       }
     }
+    
+    // Always trigger status summary on init for sidebar badge
+    loadStatusSummary();
   } catch (err: any) {
-    console.error('[GAS API] Error loading data:', err);
-    addToast('Koneksi Gagal', 'Gagal memuat data dari Google Sheets. Periksa URL AppScript kamu.', 'error');
+    console.error('[GAS API] Error loading initial settings:', err);
   } finally {
     isLoading.set(false);
-    paginationState.update(s => ({ ...s, isLoadingMore: false }));
   }
 }
 
-export async function loadMoreOrders() {
-  const currentMeta = get(paginationState);
-  if (!currentMeta.hasMore || currentMeta.isLoadingMore) return;
-  const currentQuery = get(globalSearch);
-  await loadDataFromGAS(currentMeta.page + 1, currentMeta.pageSize, true, currentQuery);
-}
 
-// Global Search Debounce Logic
-let searchTimeout: any;
-let isInitialLoad = true;
-
-globalSearch.subscribe((query) => {
-  if (typeof window === 'undefined') return;
-  
-  // Prevent double fetching on initial load since loadDataFromGAS is called on startup
-  if (isInitialLoad) {
-    isInitialLoad = false;
-    loadDataFromGAS(1, 50, false, query);
-    return;
-  }
-
-  if (searchTimeout) clearTimeout(searchTimeout);
-  searchTimeout = setTimeout(() => {
-    // Reset page to 1 when search query changes
-    loadDataFromGAS(1, 50, false, query);
-  }, 500); // 500ms debounce
-});
 
 export async function pushAllToGAS() {
   if (!PUBLIC_GAS_URL) {

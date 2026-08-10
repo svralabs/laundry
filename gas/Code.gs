@@ -29,14 +29,27 @@ function handleApiAction(action, payload) {
 
   // ── READ — paginated ───────────────────────
   if (action === 'getOrders') {
-    var page     = (payload && payload.page)     ? parseInt(payload.page)     : 1;
-    var pageSize = (payload && payload.pageSize) ? parseInt(payload.pageSize) : 50;
-    return getPagedData('orders', page, pageSize);
+    var page         = (payload && payload.page)         ? parseInt(payload.page)         : 1;
+    var pageSize     = (payload && payload.pageSize)     ? parseInt(payload.pageSize)     : 10;
+    var q            = (payload && payload.q)            ? payload.q            : undefined;
+    var statusFilter = (payload && payload.statusFilter) ? payload.statusFilter : undefined;
+    var yearFilter   = (payload && payload.yearFilter)   ? payload.yearFilter   : undefined;
+    return getPagedOrders(page, pageSize, q, statusFilter, yearFilter);
   }
   if (action === 'getCustomers') {
     var page     = (payload && payload.page)     ? parseInt(payload.page)     : 1;
-    var pageSize = (payload && payload.pageSize) ? parseInt(payload.pageSize) : 200;
-    return getPagedData('customers', page, pageSize);
+    var pageSize = (payload && payload.pageSize) ? parseInt(payload.pageSize) : 10;
+    var q        = (payload && payload.q)        ? payload.q        : undefined;
+    return getPagedCustomers(page, pageSize, q);
+  }
+
+  // ── READ — dashboard & summary ──────────────
+  if (action === 'getDashboardStats') {
+    var timeframe = (payload && payload.timeframe) ? payload.timeframe : 'today';
+    return { success: true, data: getDashboardStatsData(timeframe) };
+  }
+  if (action === 'getStatusSummary') {
+    return { success: true, data: getStatusSummaryData() };
   }
 
   // ── READ — cached master data ──────────────
@@ -75,14 +88,17 @@ function handleApiAction(action, payload) {
   // ── WRITE — orders ─────────────────────────
   if (action === 'addOrder') {
     appendSheetRow('orders', payload);
+    invalidateSummaryCache();
     return { success: true, message: 'Order added' };
   }
   if (action === 'updateOrderStatus') {
     updateSheetRow('orders', payload.id, { status: payload.status, updated_at: payload.updated_at || new Date().toISOString() });
+    invalidateSummaryCache();
     return { success: true, message: 'Status updated' };
   }
   if (action === 'deleteOrder') {
     deleteSheetRow('orders', payload.id);
+    invalidateSummaryCache();
     return { success: true, message: 'Order deleted' };
   }
 
@@ -212,110 +228,278 @@ function invalidateCache(key) {
 // P2-A: PAGINATED READ
 // ─────────────────────────────────────────────
 
-/**
- * Baca hanya slice baris yang diminta — tidak load seluruh sheet ke memory.
- * Menggunakan getRange(startRow, startCol, numRows, numCols) secara tepat.
- */
-function getPagedData(sheetName, page, pageSize, q) {
-  var sheet = getOrCreateSheet(sheetName);
+// ─────────────────────────────────────────────
+// OPTIMIZED PAGINATION & DASHBOARD FUNCTIONS
+// ─────────────────────────────────────────────
+
+function getPagedOrders(page, pageSize, q, statusFilter, yearFilter) {
+  var sheet = getOrCreateSheet('orders');
   var lastRow = sheet.getLastRow();
 
-  // Tidak ada data (hanya header atau kosong)
   if (lastRow <= 1) {
-    return { success: true, data: [], meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0 } };
+    return { success: true, data: [], meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0, from: 0, to: 0 } };
   }
 
-  var numCols = HEADERS_MAP[sheetName] ? HEADERS_MAP[sheetName].length : sheet.getLastColumn();
-  // Ambil header (O(1) — baris tunggal)
+  var numCols = HEADERS_MAP['orders'].length;
   var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
 
-  if (!q) {
-    // Normal Pagination (tanpa pencarian)
-    var totalRows  = lastRow - 1;            
-    var totalPages = Math.ceil(totalRows / pageSize);
-    var startDataRow = (page - 1) * pageSize + 1; 
+  var matchingRowIndices = [];
 
-    if (startDataRow > totalRows) {
-      return { success: true, data: [], meta: { total: totalRows, page: page, pageSize: pageSize, totalPages: totalPages } };
-    }
-
-    var sheetStartRow = startDataRow + 1;   
-    var numRows = Math.min(pageSize, totalRows - startDataRow + 1);
-    var rawData = sheet.getRange(sheetStartRow, 1, numRows, numCols).getValues();
-
-    var rows = [];
-    for (var i = 0; i < rawData.length; i++) {
-      var row = rawData[i];
-      var obj = {};
-      var hasValue = false;
-      for (var j = 0; j < headers.length; j++) {
-        var val = row[j];
-        if (val instanceof Date) val = val.toISOString().slice(0, 10);
-        obj[headers[j]] = val;
-        if (val !== '') hasValue = true;
-      }
-      if (hasValue) rows.push(obj);
-    }
-
-    return { success: true, data: rows, meta: { total: totalRows, page: page, pageSize: pageSize, totalPages: totalPages } };
-
-  } else {
-    // Pencarian dengan TextFinder (Sangat cepat di level server Google)
-    var finder = sheet.createTextFinder(q).matchCase(false);
+  if (q) {
+    var searchRows = Math.min(lastRow - 1, 30000);
+    var rangeToSearch = sheet.getRange(lastRow - searchRows + 1, 1, searchRows, numCols);
+    var finder = rangeToSearch.createTextFinder(q).matchCase(false);
     var matches = finder.findAll();
-    var matchRows = {};
-    for (var m = 0; m < matches.length; m++) {
+    var matchDict = {};
+    for (var m = 0; m < Math.min(matches.length, 300); m++) {
       var r = matches[m].getRow();
-      if (r > 1) matchRows[r] = true; // Abaikan pencarian yang ketemu di Header
+      if (r > 1) matchDict[r] = true;
     }
-    
-    var uniqueRows = Object.keys(matchRows).map(function(n) { return parseInt(n, 10); });
-    uniqueRows.sort(function(a, b) { return a - b; }); // Urutkan nomor baris dari terkecil ke terbesar
-
-    var totalRows = uniqueRows.length;
-    var totalPages = Math.ceil(totalRows / pageSize);
-    var startIdx = (page - 1) * pageSize;
-    var pageRowIndices = uniqueRows.slice(startIdx, startIdx + pageSize);
-
-    var rows = [];
-    if (pageRowIndices.length > 0) {
-      // Optimasi: Gabungkan request getRange jika barisnya berdekatan (contiguous)
-      var fetchRanges = [];
-      var currentStart = pageRowIndices[0];
-      var currentCount = 1;
-      
-      for (var k = 1; k < pageRowIndices.length; k++) {
-        if (pageRowIndices[k] === currentStart + currentCount) {
-          currentCount++;
-        } else {
-          fetchRanges.push({ r: currentStart, c: currentCount });
-          currentStart = pageRowIndices[k];
-          currentCount = 1;
-        }
-      }
-      fetchRanges.push({ r: currentStart, c: currentCount });
-
-      // Fetch data menggunakan chunk range
-      for (var k = 0; k < fetchRanges.length; k++) {
-        var rg = fetchRanges[k];
-        var dataBlock = sheet.getRange(rg.r, 1, rg.c, numCols).getValues();
-        for (var rIdx = 0; rIdx < dataBlock.length; rIdx++) {
-          var rowData = dataBlock[rIdx];
-          var obj = {};
-          var hasValue = false;
-          for (var j = 0; j < headers.length; j++) {
-            var val = rowData[j];
-            if (val instanceof Date) val = val.toISOString().slice(0, 10);
-            obj[headers[j]] = val;
-            if (val !== '') hasValue = true;
-          }
-          if (hasValue) rows.push(obj);
-        }
-      }
+    matchingRowIndices = Object.keys(matchDict).map(function(n) { return parseInt(n, 10); });
+    matchingRowIndices.sort(function(a, b) { return b - a; });
+  } else {
+    for (var r = lastRow; r >= 2; r--) {
+      matchingRowIndices.push(r);
     }
-    
-    return { success: true, data: rows, meta: { total: totalRows, page: page, pageSize: pageSize, totalPages: totalPages } };
   }
+
+  if (statusFilter || yearFilter) {
+    var filtered = [];
+    var statusColIdx = headers.indexOf('status');
+    var tanggalColIdx = headers.indexOf('tanggal');
+
+    for (var i = 0; i < matchingRowIndices.length; i++) {
+      var rowNum = matchingRowIndices[i];
+      var rowVals = sheet.getRange(rowNum, 1, 1, numCols).getValues()[0];
+      
+      var matchesStatus = !statusFilter || statusFilter === 'Semua' || rowVals[statusColIdx] === statusFilter;
+      var tVal = rowVals[tanggalColIdx];
+      if (tVal instanceof Date) tVal = tVal.toISOString().slice(0, 10);
+      else tVal = tVal ? tVal.toString().slice(0, 10) : '';
+
+      var matchesYear = !yearFilter || yearFilter === 'Semua' || (tVal && tVal.startsWith(yearFilter));
+
+      if (matchesStatus && matchesYear) {
+        filtered.push(rowNum);
+      }
+    }
+    matchingRowIndices = filtered;
+  }
+
+  var total = matchingRowIndices.length;
+  var totalPages = Math.ceil(total / pageSize) || 1;
+  var startIdx = (page - 1) * pageSize;
+  var pageIndices = matchingRowIndices.slice(startIdx, startIdx + pageSize);
+
+  var rows = [];
+  for (var p = 0; p < pageIndices.length; p++) {
+    var rowData = sheet.getRange(pageIndices[p], 1, 1, numCols).getValues()[0];
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      var val = rowData[j];
+      if (val instanceof Date) val = val.toISOString().slice(0, 10);
+      obj[headers[j]] = val;
+    }
+    rows.push(obj);
+  }
+
+  var from = total === 0 ? 0 : startIdx + 1;
+  var to = Math.min(startIdx + pageSize, total);
+
+  return {
+    success: true,
+    data: rows,
+    meta: {
+      total: total,
+      page: page,
+      pageSize: pageSize,
+      totalPages: totalPages,
+      from: from,
+      to: to
+    }
+  };
+}
+
+function getPagedCustomers(page, pageSize, q) {
+  var sheet = getOrCreateSheet('customers');
+  var lastRow = sheet.getLastRow();
+
+  if (lastRow <= 1) {
+    return { success: true, data: [], meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0, from: 0, to: 0 } };
+  }
+
+  var numCols = HEADERS_MAP['customers'].length;
+  var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
+
+  var matchingRowIndices = [];
+
+  if (q) {
+    var finder = sheet.getRange(2, 1, lastRow - 1, numCols).createTextFinder(q).matchCase(false);
+    var matches = finder.findAll();
+    var matchDict = {};
+    for (var m = 0; m < Math.min(matches.length, 300); m++) {
+      var r = matches[m].getRow();
+      if (r > 1) matchDict[r] = true;
+    }
+    matchingRowIndices = Object.keys(matchDict).map(function(n) { return parseInt(n, 10); });
+    matchingRowIndices.sort(function(a, b) { return b - a; });
+  } else {
+    for (var r = lastRow; r >= 2; r--) {
+      matchingRowIndices.push(r);
+    }
+  }
+
+  var total = matchingRowIndices.length;
+  var totalPages = Math.ceil(total / pageSize) || 1;
+  var startIdx = (page - 1) * pageSize;
+  var pageIndices = matchingRowIndices.slice(startIdx, startIdx + pageSize);
+
+  var rows = [];
+  for (var p = 0; p < pageIndices.length; p++) {
+    var rowData = sheet.getRange(pageIndices[p], 1, 1, numCols).getValues()[0];
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      var val = rowData[j];
+      if (val instanceof Date) val = val.toISOString().slice(0, 10);
+      obj[headers[j]] = val;
+    }
+    rows.push(obj);
+  }
+
+  var from = total === 0 ? 0 : startIdx + 1;
+  var to = Math.min(startIdx + pageSize, total);
+
+  return {
+    success: true,
+    data: rows,
+    meta: {
+      total: total,
+      page: page,
+      pageSize: pageSize,
+      totalPages: totalPages,
+      from: from,
+      to: to
+    }
+  };
+}
+
+function getDashboardStatsData(timeframe) {
+  return getCachedData('dash_stats_' + timeframe, function() {
+    var custSheet = getOrCreateSheet('customers');
+    var ordSheet = getOrCreateSheet('orders');
+    
+    var totalCustomers = Math.max(0, custSheet.getLastRow() - 1);
+    var lastOrdRow = ordSheet.getLastRow();
+    
+    if (lastOrdRow <= 1) {
+      return {
+        totalCustomers: totalCustomers,
+        todayOrders: 0,
+        sedangDicuci: 0,
+        siapDiambil: 0,
+        pendapatanHariIni: 0,
+        pendapatanPeriod: 0
+      };
+    }
+
+    var today = new Date().toISOString().slice(0, 10);
+    var now = new Date();
+    var currYear = now.getFullYear().toString();
+    var currMonth = today.slice(0, 7);
+
+    var scanCount = Math.min(3000, lastOrdRow - 1);
+    var data = ordSheet.getRange(lastOrdRow - scanCount + 1, 1, scanCount, 18).getValues();
+
+    var todayOrders = 0;
+    var sedangDicuci = 0;
+    var siapDiambil = 0;
+    var pendapatanHariIni = 0;
+    var pendapatanPeriod = 0;
+
+    for (var i = 0; i < data.length; i++) {
+      var row = data[i];
+      var tDate = row[2];
+      if (tDate instanceof Date) tDate = tDate.toISOString().slice(0, 10);
+      else tDate = tDate ? tDate.toString().slice(0, 10) : '';
+
+      var status = row[13];
+      var total = parseFloat(row[12]) || 0;
+
+      if (tDate === today) {
+        todayOrders++;
+        pendapatanHariIni += total;
+      }
+
+      if (status === 'Masuk' || status === 'Dicuci' || status === 'Disetrika') {
+        sedangDicuci++;
+      } else if (status === 'Selesai') {
+        siapDiambil++;
+      }
+
+      if (timeframe === 'today' && tDate === today) {
+        pendapatanPeriod += total;
+      } else if (timeframe === 'week') {
+        var diffDays = (now.getTime() - new Date(tDate).getTime()) / 86400000;
+        if (diffDays >= 0 && diffDays <= 7) pendapatanPeriod += total;
+      } else if (timeframe === 'month' && tDate.slice(0, 7) === currMonth) {
+        pendapatanPeriod += total;
+      } else if (timeframe === 'year' && tDate.slice(0, 4) === currYear) {
+        pendapatanPeriod += total;
+      }
+    }
+
+    return {
+      totalCustomers: totalCustomers,
+      todayOrders: todayOrders,
+      sedangDicuci: sedangDicuci,
+      siapDiambil: siapDiambil,
+      pendapatanHariIni: pendapatanHariIni,
+      pendapatanPeriod: pendapatanPeriod
+    };
+  }, 60);
+}
+
+function getStatusSummaryData() {
+  return getCachedData('status_summary_metrics', function() {
+    var sheet = getOrCreateSheet('orders');
+    var lastRow = sheet.getLastRow();
+    
+    var summary = {
+      Semua: Math.max(0, lastRow - 1),
+      Masuk: 0,
+      Dicuci: 0,
+      Disetrika: 0,
+      Selesai: 0,
+      Diambil: 0,
+      ongoingTotal: 0
+    };
+
+    if (lastRow <= 1) return summary;
+
+    var scanCount = Math.min(5000, lastRow - 1);
+    var statusCol = sheet.getRange(lastRow - scanCount + 1, 14, scanCount, 1).getValues();
+
+    for (var i = 0; i < statusCol.length; i++) {
+      var st = statusCol[i][0];
+      if (summary[st] !== undefined) {
+        summary[st]++;
+      }
+    }
+
+    summary.ongoingTotal = (summary.Masuk || 0) + (summary.Dicuci || 0) + (summary.Disetrika || 0);
+    return summary;
+  }, 30);
+}
+
+function invalidateSummaryCache() {
+  try {
+    var cache = CacheService.getScriptCache();
+    cache.remove('status_summary_metrics');
+    cache.remove('dash_stats_today');
+    cache.remove('dash_stats_week');
+    cache.remove('dash_stats_month');
+    cache.remove('dash_stats_year');
+  } catch(e) {}
 }
 
 // ─────────────────────────────────────────────

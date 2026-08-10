@@ -1,6 +1,6 @@
 <!-- ==================== HALAMAN UTAMA / DASHBOARD ==================== -->
 <script lang="ts">
-  import { stats, orders, customers, globalSearch, isLoading } from "$stores/laundryStore";
+  import { dashboardStats, loadDashboardStats, loadOrders, orders, isLoading } from "$stores/laundryStore";
   import StatCard from "$components/StatCard.svelte";
   import StatusBadge from "$components/StatusBadge.svelte";
   import StepProgress from "$components/StepProgress.svelte";
@@ -8,6 +8,7 @@
   import TableRowSkeleton from "$lib/components/skeletons/TableRowSkeleton.svelte";
   import ProgressSkeleton from "$lib/components/skeletons/ProgressSkeleton.svelte";
   import { formatRupiah, formatDateShort } from "$utils/formatters";
+  import { onMount } from "svelte";
   import {
     Users,
     ShoppingBag,
@@ -22,19 +23,21 @@
     FileText,
   } from "lucide-svelte";
 
-  $: filteredOrders = $orders.filter((o) => {
-    if (!$globalSearch) return true;
-    const q = $globalSearch.toLowerCase();
-    return (
-      o.invoice.toLowerCase().includes(q) ||
-      (o.customer_nama && o.customer_nama.toLowerCase().includes(q)) ||
-      (o.customer_hp && o.customer_hp.includes(q))
-    );
+  type Timeframe = 'today' | 'week' | 'month' | 'year';
+  let activeTimeframe: Timeframe = 'today';
+
+  onMount(() => {
+    loadDashboardStats(activeTimeframe);
+    loadOrders(1, 5);
   });
 
-  $: recentOrders = filteredOrders.slice(0, 5);
-  $: recentCustomers = $customers.slice(0, 5);
-  $: activeLaundryProgress = filteredOrders
+  function setTimeframe(tf: Timeframe) {
+    activeTimeframe = tf;
+    loadDashboardStats(tf);
+  }
+
+  $: recentOrders = $orders.slice(0, 5);
+  $: activeLaundryProgress = $orders
     .filter((o) => o.status !== "Diambil")
     .slice(0, 4);
 
@@ -84,62 +87,80 @@
     ></div>
   </div>
 
-  <!-- Stat Cards Grid (6 Metric Cards as specified) -->
-  <div
-    class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-4"
-  >
-    {#if $isLoading}
-      {#each Array(6) as _}
-        <StatCardSkeleton />
-      {/each}
-    {:else}
-      <StatCard
-        title="Total Pelanggan"
-        value={$stats.totalCustomers}
-        subtitle="Orang terdaftar"
-        icon={Users}
-        iconColor="text-blue-600 bg-blue-50 dark:bg-blue-950/60"
-        trend="+12%"
-        trendUp={true}
-      />
-      <StatCard
-        title="Pesanan Hari Ini"
-        value={$stats.todayOrders}
-        subtitle="Nota masuk"
-        icon={ShoppingBag}
-        iconColor="text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60"
-        trend="+5 nota"
-        trendUp={true}
-      />
-      <StatCard
-        title="Sedang Dicuci"
-        value={$stats.sedangDicuci}
-        subtitle="Dalam proses"
-        icon={Loader2}
-        iconColor="text-amber-600 bg-amber-50 dark:bg-amber-950/60"
-      />
-      <StatCard
-        title="Siap Diambil"
-        value={$stats.siapDiambil}
-        subtitle="Sudah selesai"
-        icon={CheckCircle2}
-        iconColor="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60"
-      />
-      <StatCard
-        title="Omset Hari Ini"
-        value={formatRupiah($stats.pendapatanHariIni)}
-        subtitle="Total hari ini"
-        trend="+8%"
-        trendUp={true}
-      />
-      <StatCard
-        title="Omset Bulan Ini"
-        value={formatRupiah($stats.pendapatanBulanIni)}
-        subtitle="Total bulan ini"
-        trend="+18%"
-        trendUp={true}
-      />
-    {/if}
+  <!-- Timeframe Filter Chips & Stat Cards Grid -->
+  <div class="space-y-3">
+    <div class="flex items-center justify-between">
+      <h2 class="text-sm font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
+        Statistik Usaha
+      </h2>
+      <div class="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-2xl shadow-sm">
+        {#each [
+          { id: 'today', label: 'Hari Ini' },
+          { id: 'week', label: 'Minggu Ini' },
+          { id: 'month', label: 'Bulan Ini' },
+          { id: 'year', label: 'Tahun Ini' }
+        ] as tf}
+          <button
+            type="button"
+            on:click={() => setTimeframe(tf.id as Timeframe)}
+            class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all
+            {activeTimeframe === tf.id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}"
+          >
+            {tf.label}
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <div
+      class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-4"
+    >
+      {#if $isLoading}
+        {#each Array(6) as _}
+          <StatCardSkeleton />
+        {/each}
+      {:else}
+        <StatCard
+          title="Total Pelanggan"
+          value={$dashboardStats.totalCustomers}
+          subtitle="Orang terdaftar"
+          icon={Users}
+          iconColor="text-blue-600 bg-blue-50 dark:bg-blue-950/60"
+        />
+        <StatCard
+          title="Pesanan Hari Ini"
+          value={$dashboardStats.todayOrders}
+          subtitle="Nota masuk"
+          icon={ShoppingBag}
+          iconColor="text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60"
+        />
+        <StatCard
+          title="Sedang Dicuci"
+          value={$dashboardStats.sedangDicuci}
+          subtitle="Dalam proses"
+          icon={Loader2}
+          iconColor="text-amber-600 bg-amber-50 dark:bg-amber-950/60"
+        />
+        <StatCard
+          title="Siap Diambil"
+          value={$dashboardStats.siapDiambil}
+          subtitle="Sudah selesai"
+          icon={CheckCircle2}
+          iconColor="text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60"
+        />
+        <StatCard
+          title="Omset Hari Ini"
+          value={formatRupiah($dashboardStats.pendapatanHariIni)}
+          subtitle="Total hari ini"
+        />
+        <StatCard
+          title="Omset Periode Pilihan"
+          value={formatRupiah($dashboardStats.pendapatanPeriod)}
+          subtitle="Total periode ini"
+          trendUp={true}
+        />
+      {/if}
+    </div>
   </div>
 
   <!-- Charts Section -->

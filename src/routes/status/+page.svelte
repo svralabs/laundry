@@ -1,12 +1,13 @@
 <!-- ==================== HALAMAN MONITOR STATUS & DAFTAR TRANSAKSI ==================== -->
 <script lang="ts">
-  import { orders, globalSearch, paginationState, loadDataFromGAS, isLoading } from '$stores/laundryStore';
+  import { orders, statusSummary, loadStatusSummary, loadOrders, paginationState, isLoading } from '$stores/laundryStore';
   import CardGridSkeleton from '$lib/components/skeletons/CardGridSkeleton.svelte';
   import type { OrderStatus } from '$types/laundry';
   import StatusBadge from '$components/StatusBadge.svelte';
   import StepProgress from '$components/StepProgress.svelte';
   import { ORDER_STATUSES, formatRupiah, formatDateShort } from '$utils/formatters';
   import { generateOrderPDF } from '$utils/pdf';
+  import { onMount } from 'svelte';
   import {
     ListTodo,
     Search,
@@ -15,26 +16,35 @@
     Calendar,
     Shirt,
     ArrowRight,
-    CheckCircle2
+    CheckCircle2,
+    ChevronLeft,
+    ChevronRight
   } from 'lucide-svelte';
 
   let activeTabFilter: OrderStatus | 'Semua' = 'Semua';
-  $: filteredOrders = $orders.filter((o) => {
-    const matchesTab = activeTabFilter === 'Semua' || o.status === activeTabFilter;
-    if (!matchesTab) return false;
+  let searchInput = '';
+  let searchTimeout: any;
 
-    if (!$globalSearch) return true;
-    const q = $globalSearch.toLowerCase();
-    return (
-      o.invoice.toLowerCase().includes(q) ||
-      (o.customer_nama && o.customer_nama.toLowerCase().includes(q)) ||
-      (o.customer_hp && o.customer_hp.includes(q))
-    );
+  onMount(() => {
+    loadStatusSummary();
+    loadOrders(1, 10, activeTabFilter, 'Semua', searchInput);
   });
 
-  function countByStatus(st: OrderStatus | 'Semua') {
-    if (st === 'Semua') return $orders.length;
-    return $orders.filter((o) => o.status === st).length;
+  function selectTab(st: OrderStatus | 'Semua') {
+    activeTabFilter = st;
+    loadOrders(1, 10, activeTabFilter, 'Semua', searchInput);
+  }
+
+  function handleSearchInput() {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      loadOrders(1, 10, activeTabFilter, 'Semua', searchInput);
+    }, 400);
+  }
+
+  function goToPage(p: number) {
+    if (p < 1 || p > $paginationState.totalPages) return;
+    loadOrders(p, 10, activeTabFilter, 'Semua', searchInput);
   }
 </script>
 
@@ -56,22 +66,22 @@
   <div class="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
     <button
       type="button"
-      on:click={() => (activeTabFilter = 'Semua')}
+      on:click={() => selectTab('Semua')}
       class="px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap shadow-sm flex items-center gap-2
       {activeTabFilter === 'Semua' ? 'bg-slate-800 text-white dark:bg-white dark:text-slate-900 font-extrabold' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 border border-slate-200 dark:border-slate-800'}"
     >
-      Semua Status ({countByStatus('Semua')})
+      Semua Status ({$statusSummary.Semua || 0})
     </button>
 
     {#each ORDER_STATUSES as st}
       <button
         type="button"
-        on:click={() => (activeTabFilter = st)}
+        on:click={() => selectTab(st)}
         class="px-4 py-2.5 rounded-2xl text-xs font-bold transition whitespace-nowrap shadow-sm flex items-center gap-2
         {activeTabFilter === st ? 'bg-blue-600 text-white shadow-blue-500/20' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 border border-slate-200 dark:border-slate-800'}"
       >
         <StatusBadge status={st} size="sm" />
-        ({countByStatus(st)})
+        ({$statusSummary[st] || 0})
       </button>
     {/each}
   </div>
@@ -82,7 +92,8 @@
       <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
       <input
         type="text"
-        bind:value={$globalSearch}
+        bind:value={searchInput}
+        on:input={handleSearchInput}
         placeholder="Filter berdasarkan nota, nama pelanggan..."
         class="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-600"
       />
@@ -94,7 +105,7 @@
     {#if $isLoading}
       <CardGridSkeleton count={4} />
     {:else}
-      {#each filteredOrders as ord (ord.id)}
+      {#each $orders as ord (ord.id)}
         <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card hover:shadow-soft transition-all duration-300 space-y-5">
           <!-- Top Info -->
           <div class="flex items-start justify-between">
@@ -164,22 +175,34 @@
     {/if}
   </div>
 
-  <!-- Backend Pagination (Load More) -->
-  {#if $paginationState.page < $paginationState.totalPages}
-    <div class="flex justify-center mt-8">
+  <!-- Pagination Controls -->
+  <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl px-6 py-4 shadow-card flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+    <div>
+      Menampilkan <strong class="text-slate-800 dark:text-white">{$paginationState.from} - {$paginationState.to}</strong> dari total <strong class="text-slate-800 dark:text-white">{$paginationState.total}</strong> data cucian
+    </div>
+
+    <div class="flex items-center gap-2">
       <button
         type="button"
-        disabled={$paginationState.isLoadingMore}
-        on:click={() => loadDataFromGAS($paginationState.page + 1, $paginationState.pageSize, true, $globalSearch)}
-        class="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
+        disabled={$paginationState.page <= 1 || $isLoading}
+        on:click={() => goToPage($paginationState.page - 1)}
+        class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+        title="Halaman Sebelumnya"
       >
-        {#if $paginationState.isLoadingMore}
-          <div class="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin"></div>
-          Memuat Data...
-        {:else}
-          Muat Lebih Banyak Data
-        {/if}
+        <ChevronLeft class="w-4 h-4" />
+      </button>
+      <span class="font-bold text-slate-800 dark:text-slate-200 px-2">
+        Halaman {$paginationState.page} / {$paginationState.totalPages}
+      </span>
+      <button
+        type="button"
+        disabled={$paginationState.page >= $paginationState.totalPages || $isLoading}
+        on:click={() => goToPage($paginationState.page + 1)}
+        class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+        title="Halaman Selanjutnya"
+      >
+        <ChevronRight class="w-4 h-4" />
       </button>
     </div>
-  {/if}
+  </div>
 </div>

@@ -56,6 +56,8 @@ export interface APIResponse<T = any> {
     page?: number;
     pageSize?: number;
     totalPages?: number;
+    from?: number;
+    to?: number;
     capacity?: CapacityStatus;
   };
   error?: string;
@@ -73,4 +75,23 @@ export interface ToastMessage {
   title: string;
   message: string;
   duration?: number;
+}
+
+export interface DashboardStatsData {
+  totalCustomers: number;
+  todayOrders: number;
+  sedangDicuci: number;
+  siapDiambil: number;
+  pendapatanHariIni: number;
+  pendapatanPeriod: number;
+}
+
+export interface StatusSummaryData {
+  Semua: number;
+  Masuk: number;
+  Dicuci: number;
+  Disetrika: number;
+  Selesai: number;
+  Diambil: number;
+  ongoingTotal: number;
 }

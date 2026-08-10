@@ -1,12 +1,13 @@
 <!-- ==================== HALAMAN KELOLA PELANGGAN ==================== -->
 <script lang="ts">
-  import { customers, deleteCustomer, globalSearch, paginationState, loadDataFromGAS, isLoading } from '$stores/laundryStore';
+  import { customers, deleteCustomer, paginationState, loadCustomers, isLoading } from '$stores/laundryStore';
   import TableRowSkeleton from '$lib/components/skeletons/TableRowSkeleton.svelte';
   import type { Customer } from '$types/laundry';
   import CustomerModal from '$components/CustomerModal.svelte';
   import ConfirmModal from '$components/ConfirmModal.svelte';
   import { formatDateShort } from '$utils/formatters';
   import { exportCustomersToExcel } from '$utils/excel';
+  import { onMount } from 'svelte';
   import {
     Users,
     UserPlus,
@@ -27,35 +28,26 @@
   let showConfirmDelete = false;
   let customerToDeleteId: string | null = null;
 
-  let searchLocal = '';
-  let sortBy: 'nama' | 'created_at' = 'created_at';
-  let sortAsc = false;
+  let searchInput = '';
+  let searchTimeout: any;
 
-  let currentPage = 1;
-  const pageSize = 8;
+  onMount(() => {
+    loadCustomers(1, 10, searchInput);
+  });
 
-  $: filteredCustomers = $customers
-    .filter((c) => {
-      if (!$globalSearch) return true;
-      const q = $globalSearch.toLowerCase();
-      return (
-        c.nama.toLowerCase().includes(q) ||
-        c.hp.includes(q) ||
-        c.alamat.toLowerCase().includes(q)
-      );
-    })
-    .sort((a, b) => {
-      let valA = a[sortBy];
-      let valB = b[sortBy];
-      if (sortAsc) {
-        return valA.localeCompare(valB);
-      } else {
-        return valB.localeCompare(valA);
-      }
-    });
+  function handleSearchInput() {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      loadCustomers(1, 10, searchInput);
+    }, 400);
+  }
 
-  $: totalPages = Math.ceil(filteredCustomers.length / pageSize) || 1;
-  $: paginatedCustomers = filteredCustomers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  function goToPage(p: number) {
+    if (p < 1 || p > $paginationState.totalPages) return;
+    loadCustomers(p, 10, searchInput);
+  }
+
+
 
   function handleOpenAdd() {
     editCustomerData = null;
@@ -79,14 +71,7 @@
     }
   }
 
-  function toggleSort(field: 'nama' | 'created_at') {
-    if (sortBy === field) {
-      sortAsc = !sortAsc;
-    } else {
-      sortBy = field;
-      sortAsc = true;
-    }
-  }
+
 </script>
 
 <div class="space-y-6">
@@ -129,30 +114,13 @@
       <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
       <input
         type="text"
-        bind:value={$globalSearch}
+        bind:value={searchInput}
+        on:input={handleSearchInput}
         placeholder="Cari nama, HP, atau alamat..."
         class="w-full pl-10 pr-4 py-2 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-600"
       />
     </div>
 
-    <div class="flex items-center gap-2 w-full sm:w-auto justify-end text-xs font-semibold text-slate-500">
-      <span>Urutkan:</span>
-      <button
-        type="button"
-        on:click={() => toggleSort('nama')}
-        class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5 transition
-        {sortBy === 'nama' ? 'bg-blue-50 text-blue-600 border-blue-200 font-bold' : ''}"
-      >
-        Nama <ArrowUpDown class="w-3 h-3" />
-      </button>
-      <button
-        type="button"
-        on:click={() => toggleSort('created_at')}
-        class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center gap-1.5 transition
-        {sortBy === 'created_at' ? 'bg-blue-50 text-blue-600 border-blue-200 font-bold' : ''}"
-      >
-        Tanggal Daftar <ArrowUpDown class="w-3 h-3" />
-      </button>
     </div>
   </div>
 
@@ -174,7 +142,7 @@
           {#if $isLoading}
             <TableRowSkeleton cols={6} rows={5} />
           {:else}
-            {#each paginatedCustomers as cust}
+            {#each $customers as cust}
             <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group">
               <td class="py-4 px-6 font-mono font-bold text-blue-600 dark:text-blue-400">
                 {cust.id}
@@ -231,54 +199,36 @@
     </div>
 
     <!-- Pagination Controls -->
-    <div class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
+    <div class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
       <div>
-        Menampilkan <strong>{paginatedCustomers.length}</strong> dari <strong>{filteredCustomers.length}</strong> pelanggan
+        Menampilkan <strong class="text-slate-800 dark:text-white">{$paginationState.from} - {$paginationState.to}</strong> dari total <strong class="text-slate-800 dark:text-white">{$paginationState.total}</strong> pelanggan
       </div>
 
       <div class="flex items-center gap-2">
         <button
           type="button"
-          disabled={currentPage === 1}
-          on:click={() => currentPage--}
+          disabled={$paginationState.page <= 1 || $isLoading}
+          on:click={() => goToPage($paginationState.page - 1)}
           class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+          title="Halaman Sebelumnya"
         >
           <ChevronLeft class="w-4 h-4" />
         </button>
-        <span class="font-bold text-slate-800 dark:text-slate-200">
-          {currentPage} / {totalPages}
+        <span class="font-bold text-slate-800 dark:text-slate-200 px-2">
+          Halaman {$paginationState.page} / {$paginationState.totalPages}
         </span>
         <button
           type="button"
-          disabled={currentPage >= totalPages}
-          on:click={() => currentPage++}
+          disabled={$paginationState.page >= $paginationState.totalPages || $isLoading}
+          on:click={() => goToPage($paginationState.page + 1)}
           class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+          title="Halaman Selanjutnya"
         >
           <ChevronRight class="w-4 h-4" />
         </button>
       </div>
     </div>
   </div>
-
-  <!-- Backend Pagination (Load More) -->
-  {#if $paginationState.page < $paginationState.totalPages}
-    <div class="flex justify-center mt-6">
-      <button
-        type="button"
-        disabled={$paginationState.isLoadingMore}
-        on:click={() => loadDataFromGAS($paginationState.page + 1, $paginationState.pageSize, true, $globalSearch)}
-        class="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
-      >
-        {#if $paginationState.isLoadingMore}
-          <div class="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin"></div>
-          Memuat Data Lanjutan...
-        {:else}
-          Muat Pelanggan Lainnya
-        {/if}
-      </button>
-    </div>
-  {/if}
-</div>
 
 <!-- Add/Edit Customer Modal -->
 <CustomerModal

@@ -1,6 +1,6 @@
 <!-- ==================== HALAMAN RIWAYAT & LAPORAN LAUNDRY ==================== -->
 <script lang="ts">
-  import { orders, deleteOrder, globalSearch, paginationState, loadDataFromGAS, isLoading } from '$stores/laundryStore';
+  import { orders, deleteOrder, paginationState, loadOrders, isLoading } from '$stores/laundryStore';
   import TableRowSkeleton from '$lib/components/skeletons/TableRowSkeleton.svelte';
   import type { Order } from '$types/laundry';
   import StatusBadge from '$components/StatusBadge.svelte';
@@ -8,7 +8,7 @@
   import { formatRupiah, formatDateShort } from '$utils/formatters';
   import { exportOrdersToExcel } from '$utils/excel';
   import { exportOrdersPDF, generateOrderPDF } from '$utils/pdf';
-  import dayjs from 'dayjs';
+  import { onMount } from 'svelte';
   import {
     History,
     Search,
@@ -22,57 +22,35 @@
     Filter
   } from 'lucide-svelte';
 
-  type DateFilter = 'Semua' | 'Hari Ini' | 'Minggu Ini' | 'Bulan Ini' | 'Custom';
+  let selectedYear = 'Semua';
+  let searchInput = '';
+  let searchTimeout: any;
 
-  let activeDateFilter: DateFilter = 'Semua';
-  let startDate = '';
-  let endDate = '';
-  let searchLocal = '';
+  onMount(() => {
+    loadOrders(1, 10, 'Semua', selectedYear, searchInput);
+  });
 
-  let currentPage = 1;
-  const pageSize = 10;
+  function selectYear(yr: string) {
+    selectedYear = yr;
+    loadOrders(1, 10, 'Semua', selectedYear, searchInput);
+  }
+
+  function handleSearchInput() {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      loadOrders(1, 10, 'Semua', selectedYear, searchInput);
+    }, 400);
+  }
+
+  function goToPage(p: number) {
+    if (p < 1 || p > $paginationState.totalPages) return;
+    loadOrders(p, 10, 'Semua', selectedYear, searchInput);
+  }
 
   let showDeleteConfirm = false;
   let orderToDeleteId: string | null = null;
 
-  $: filteredOrders = $orders.filter((o) => {
-    // 1. Search Query
-    if ($globalSearch) {
-      const q = $globalSearch.toLowerCase();
-      const matchQuery =
-        o.invoice.toLowerCase().includes(q) ||
-        (o.customer_nama && o.customer_nama.toLowerCase().includes(q)) ||
-        (o.customer_hp && o.customer_hp.includes(q)) ||
-        (o.service_nama && o.service_nama.toLowerCase().includes(q));
-      if (!matchQuery) return false;
-    }
 
-    // 2. Date Filter
-    if (activeDateFilter === 'Semua') return true;
-
-    const ordDate = dayjs(o.tanggal);
-    const today = dayjs();
-
-    if (activeDateFilter === 'Hari Ini') {
-      return ordDate.isSame(today, 'day');
-    }
-    if (activeDateFilter === 'Minggu Ini') {
-      return ordDate.isAfter(today.subtract(7, 'day'));
-    }
-    if (activeDateFilter === 'Bulan Ini') {
-      return ordDate.isSame(today, 'month');
-    }
-    if (activeDateFilter === 'Custom') {
-      if (startDate && ordDate.isBefore(dayjs(startDate), 'day')) return false;
-      if (endDate && ordDate.isAfter(dayjs(endDate), 'day')) return false;
-      return true;
-    }
-
-    return true;
-  });
-
-  $: totalPages = Math.ceil(filteredOrders.length / pageSize) || 1;
-  $: paginatedOrders = filteredOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   function handleOpenDelete(id: string) {
     orderToDeleteId = id;
@@ -104,7 +82,7 @@
     <div class="flex items-center gap-3">
       <button
         type="button"
-        on:click={() => exportOrdersToExcel(filteredOrders)}
+        on:click={() => exportOrdersToExcel($orders)}
         class="inline-flex items-center gap-2 px-4 py-2.5 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-600 hover:text-white font-bold text-xs sm:text-sm rounded-xl transition shadow-sm"
       >
         <FileSpreadsheet class="w-4 h-4" />
@@ -113,7 +91,7 @@
 
       <button
         type="button"
-        on:click={() => exportOrdersPDF(filteredOrders)}
+        on:click={() => exportOrdersPDF($orders)}
         class="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 hover:bg-rose-600 hover:text-white font-bold text-xs sm:text-sm rounded-xl transition shadow-sm"
       >
         <FileText class="w-4 h-4" />
@@ -130,46 +108,28 @@
         <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
         <input
           type="text"
-          bind:value={$globalSearch}
+          bind:value={searchInput}
+          on:input={handleSearchInput}
           placeholder="Cari nota, customer, atau layanan..."
           class="w-full pl-10 pr-4 py-2.5 text-xs sm:text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-800 dark:text-slate-100 outline-none focus:ring-2 focus:ring-blue-600"
         />
       </div>
 
-      <!-- Date Preset Chips -->
+      <!-- Year Filter Chips -->
       <div class="flex items-center gap-2 overflow-x-auto w-full lg:w-auto">
-        {#each ['Semua', 'Hari Ini', 'Minggu Ini', 'Bulan Ini', 'Custom'] as preset}
+        <span class="text-xs font-semibold text-slate-400 shrink-0">Filter Tahun:</span>
+        {#each ['Semua', '2026', '2025', '2024'] as yr}
           <button
             type="button"
-            on:click={() => (activeDateFilter = preset as DateFilter)}
-            class="px-3.5 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap
-            {activeDateFilter === preset ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+            on:click={() => selectYear(yr)}
+            class="px-3.5 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap
+            {selectedYear === yr ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'}"
           >
-            {preset}
+            {yr}
           </button>
         {/each}
       </div>
     </div>
-
-    <!-- Custom Date Range Picker (If Custom selected) -->
-    {#if activeDateFilter === 'Custom'}
-      <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-4 text-xs font-bold text-slate-600 dark:text-slate-300">
-        <span>Rentang Tanggal:</span>
-        <div class="flex items-center gap-2">
-          <input
-            type="date"
-            bind:value={startDate}
-            class="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none"
-          />
-          <span>s/d</span>
-          <input
-            type="date"
-            bind:value={endDate}
-            class="px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none"
-          />
-        </div>
-      </div>
-    {/if}
   </div>
 
   <!-- Modern Orders Table -->
@@ -192,7 +152,7 @@
           {#if $isLoading}
             <TableRowSkeleton cols={8} rows={6} />
           {:else}
-            {#each paginatedOrders as ord}
+            {#each $orders as ord}
             <tr class="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition group">
               <td class="py-4 px-6 font-mono font-bold text-blue-600 dark:text-blue-400">
                 {ord.invoice}
@@ -250,53 +210,36 @@
     </div>
 
     <!-- Pagination Controls -->
-    <div class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs text-slate-500">
+    <div class="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
       <div>
-        Menampilkan <strong>{paginatedOrders.length}</strong> dari <strong>{filteredOrders.length}</strong> transaksi
+        Menampilkan <strong class="text-slate-800 dark:text-white">{$paginationState.from} - {$paginationState.to}</strong> dari total <strong class="text-slate-800 dark:text-white">{$paginationState.total}</strong> transaksi
       </div>
 
       <div class="flex items-center gap-2">
         <button
           type="button"
-          disabled={currentPage === 1}
-          on:click={() => currentPage--}
+          disabled={$paginationState.page <= 1 || $isLoading}
+          on:click={() => goToPage($paginationState.page - 1)}
           class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+          title="Halaman Sebelumnya"
         >
           <ChevronLeft class="w-4 h-4" />
         </button>
-        <span class="font-bold text-slate-800 dark:text-slate-200">
-          {currentPage} / {totalPages}
+        <span class="font-bold text-slate-800 dark:text-slate-200 px-2">
+          Halaman {$paginationState.page} / {$paginationState.totalPages}
         </span>
         <button
           type="button"
-          disabled={currentPage >= totalPages}
-          on:click={() => currentPage++}
+          disabled={$paginationState.page >= $paginationState.totalPages || $isLoading}
+          on:click={() => goToPage($paginationState.page + 1)}
           class="p-2 rounded-xl border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+          title="Halaman Selanjutnya"
         >
           <ChevronRight class="w-4 h-4" />
         </button>
       </div>
     </div>
   </div>
-
-  <!-- Backend Pagination (Load More) -->
-  {#if $paginationState.page < $paginationState.totalPages}
-    <div class="flex justify-center mt-6">
-      <button
-        type="button"
-        disabled={$paginationState.isLoadingMore}
-        on:click={() => loadDataFromGAS($paginationState.page + 1, $paginationState.pageSize, true, $globalSearch)}
-        class="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm text-sm font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition disabled:opacity-50 flex items-center gap-2"
-      >
-        {#if $paginationState.isLoadingMore}
-          <div class="w-4 h-4 rounded-full border-2 border-blue-600 border-t-transparent animate-spin"></div>
-          Memuat Data Lanjutan...
-        {:else}
-          Muat Data Lanjutan dari Server
-        {/if}
-      </button>
-    </div>
-  {/if}
 </div>
 
 <!-- Confirm Delete Modal -->
