@@ -77,6 +77,12 @@ export interface ToastMessage {
   duration?: number;
 }
 
+export interface ChartDataItem {
+  label: string;
+  orders: number;
+  rev: number;
+}
+
 export interface DashboardStatsData {
   totalCustomers: number;
   todayOrders: number;
@@ -84,6 +90,10 @@ export interface DashboardStatsData {
   siapDiambil: number;
   pendapatanHariIni: number;
   pendapatanPeriod: number;
+  chartData?: ChartDataItem[];
+  recentOrders?: Order[];
+  activeProgress?: Order[];
+  growthPct?: number;
 }
 
 export interface StatusSummaryData {

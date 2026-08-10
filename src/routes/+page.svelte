@@ -1,4 +1,3 @@
-<!-- ==================== HALAMAN UTAMA / DASHBOARD ==================== -->
 <script lang="ts">
   import { dashboardStats, loadDashboardStats, loadOrders, orders, isLoading } from "$stores/laundryStore";
   import StatCard from "$components/StatCard.svelte";
@@ -7,6 +6,7 @@
   import StatCardSkeleton from "$lib/components/skeletons/StatCardSkeleton.svelte";
   import TableRowSkeleton from "$lib/components/skeletons/TableRowSkeleton.svelte";
   import ProgressSkeleton from "$lib/components/skeletons/ProgressSkeleton.svelte";
+  import ChartSkeleton from "$lib/components/skeletons/ChartSkeleton.svelte";
   import { formatRupiah, formatDateShort } from "$utils/formatters";
   import { onMount } from "svelte";
   import {
@@ -26,6 +26,13 @@
   type Timeframe = 'today' | 'week' | 'month' | 'year';
   let activeTimeframe: Timeframe = 'today';
 
+  const timeframeLabels: Record<Timeframe, string> = {
+    today: 'Hari Ini',
+    week: '7 Hari Terakhir',
+    month: 'Bulan Ini',
+    year: 'Tahun Ini'
+  };
+
   onMount(() => {
     loadDashboardStats(activeTimeframe);
     loadOrders(1, 5);
@@ -36,22 +43,17 @@
     loadDashboardStats(tf);
   }
 
-  $: recentOrders = $orders.slice(0, 5);
-  $: activeLaundryProgress = $orders
-    .filter((o) => o.status !== "Diambil")
-    .slice(0, 4);
+  $: chartItems = $dashboardStats.chartData || [];
+  $: maxOrders = Math.max(1, ...chartItems.map((d) => d.orders));
+  $: maxRev = Math.max(1, ...chartItems.map((d) => d.rev));
 
-  // Chart Mock Data Generators (Weekly Orders & Revenue)
-  const weeklyData = [
-    { day: "Sen", orders: 12, rev: 320000 },
-    { day: "Sel", orders: 18, rev: 450000 },
-    { day: "Rab", orders: 15, rev: 390000 },
-    { day: "Kam", orders: 22, rev: 580000 },
-    { day: "Jum", orders: 25, rev: 670000 },
-    { day: "Sab", orders: 34, rev: 920000 },
-    { day: "Min", orders: 28, rev: 750000 },
-  ];
-  const maxWeeklyOrders = Math.max(...weeklyData.map((d) => d.orders));
+  $: recentOrdersList = ($dashboardStats.recentOrders && $dashboardStats.recentOrders.length > 0)
+    ? $dashboardStats.recentOrders
+    : $orders.slice(0, 5);
+
+  $: activeProgressList = ($dashboardStats.activeProgress && $dashboardStats.activeProgress.length > 0)
+    ? $dashboardStats.activeProgress
+    : $orders.filter((o) => o.status !== "Diambil").slice(0, 4);
 </script>
 
 <div class="space-y-6">
@@ -156,7 +158,7 @@
         <StatCard
           title="Omset Periode Pilihan"
           value={formatRupiah($dashboardStats.pendapatanPeriod)}
-          subtitle="Total periode ini"
+          subtitle="Total {timeframeLabels[activeTimeframe]}"
           trendUp={true}
         />
       {/if}
@@ -165,96 +167,110 @@
 
   <!-- Charts Section -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <!-- Grafik Pesanan Mingguan -->
-    <div
-      class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card space-y-4"
-    >
-      <div class="flex items-center justify-between">
-        <div>
-          <h3 class="text-base font-extrabold text-slate-800 dark:text-white">
-            Grafik Pesanan Mingguan
-          </h3>
-          <p class="text-xs text-slate-400">
-            Jumlah nota cucian 7 hari terakhir
-          </p>
-        </div>
-        <span
-          class="px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 rounded-full border border-blue-200 dark:border-blue-800"
-        >
-          Minggu Ini
-        </span>
-      </div>
-
-      <!-- SVG Bar Chart -->
-      <div class="h-48 flex items-end justify-between gap-3 pt-6 px-2">
-        {#each weeklyData as item}
-          {@const heightPct = (item.orders / maxWeeklyOrders) * 100}
-          <div class="flex-1 flex flex-col items-center gap-2 group">
-            <span
-              class="text-[10px] font-bold text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              {item.orders}
-            </span>
-            <div
-              class="w-full bg-slate-100 dark:bg-slate-800 rounded-xl h-36 flex items-end overflow-hidden"
-            >
-              <div
-                class="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-xl group-hover:from-blue-700 group-hover:to-blue-500 transition-all duration-500 shadow-md"
-                style="height: {heightPct}%"
-              ></div>
-            </div>
-            <span class="text-xs font-bold text-slate-600 dark:text-slate-400"
-              >{item.day}</span
-            >
+    {#if $isLoading}
+      <ChartSkeleton type="bar" />
+      <ChartSkeleton type="progress" />
+    {:else}
+      <!-- Grafik Pesanan -->
+      <div
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card space-y-4"
+      >
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-extrabold text-slate-800 dark:text-white">
+              Grafik Pesanan ({timeframeLabels[activeTimeframe]})
+            </h3>
+            <p class="text-xs text-slate-400">
+              Jumlah nota cucian {timeframeLabels[activeTimeframe].toLowerCase()}
+            </p>
           </div>
-        {/each}
-      </div>
-    </div>
-
-    <!-- Grafik Pendapatan Mingguan -->
-    <div
-      class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card flex flex-col justify-between space-y-4"
-    >
-      <div class="flex items-center justify-between">
-        <div>
-          <h3 class="text-base font-extrabold text-slate-800 dark:text-white">
-            Grafik Penjualan Mingguan
-          </h3>
-          <p class="text-xs text-slate-400">
-            Nilai pendapatan 7 hari terakhir
-          </p>
+          <span
+            class="px-2.5 py-1 text-xs font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 rounded-full border border-blue-200 dark:border-blue-800"
+          >
+            {timeframeLabels[activeTimeframe]}
+          </span>
         </div>
-        <span
-          class="px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 rounded-full border border-emerald-200 dark:border-emerald-800 shrink-0"
-        >
-          +24.5%
-        </span>
-      </div>
 
-      <!-- Clean Daily Revenue Progress Bars -->
-      <div class="space-y-3 pt-2">
-        {#each weeklyData as item}
-          <div class="space-y-1">
-            <div class="flex items-center justify-between text-xs font-bold">
-              <span class="text-slate-600 dark:text-slate-400 w-10"
-                >{item.day}</span
+        <!-- SVG Dynamic Bar Chart -->
+        <div class="h-48 flex items-end justify-between gap-2 sm:gap-3 pt-6 px-1 sm:px-2">
+          {#each chartItems as item}
+            {@const heightPct = Math.max(8, (item.orders / maxOrders) * 100)}
+            <div class="flex-1 flex flex-col items-center gap-2 group">
+              <span
+                class="text-[10px] font-bold text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity"
               >
-              <span class="text-slate-800 dark:text-white font-mono"
-                >{formatRupiah(item.rev)}</span
+                {item.orders}
+              </span>
+              <div
+                class="w-full bg-slate-100 dark:bg-slate-800 rounded-xl h-36 flex items-end overflow-hidden"
+              >
+                <div
+                  class="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-xl group-hover:from-blue-700 group-hover:to-blue-500 transition-all duration-500 shadow-md"
+                  style="height: {heightPct}%"
+                ></div>
+              </div>
+              <span class="text-[11px] font-bold text-slate-600 dark:text-slate-400 truncate max-w-[45px] text-center"
+                >{item.label}</span
               >
             </div>
-            <div
-              class="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"
-            >
-              <div
-                class="h-full bg-gradient-to-r from-teal-500 via-blue-500 to-indigo-600 rounded-full transition-all duration-500 shadow-sm"
-                style="width: {Math.max(5, (item.rev / 920000) * 100)}%"
-              ></div>
+          {:else}
+            <div class="w-full h-full flex items-center justify-center text-xs text-slate-400">
+              Tidak ada data grafik.
             </div>
-          </div>
-        {/each}
+          {/each}
+        </div>
       </div>
-    </div>
+
+      <!-- Grafik Pendapatan / Penjualan -->
+      <div
+        class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-card flex flex-col justify-between space-y-4"
+      >
+        <div class="flex items-center justify-between">
+          <div>
+            <h3 class="text-base font-extrabold text-slate-800 dark:text-white">
+              Grafik Penjualan ({timeframeLabels[activeTimeframe]})
+            </h3>
+            <p class="text-xs text-slate-400">
+              Nilai pendapatan {timeframeLabels[activeTimeframe].toLowerCase()}
+            </p>
+          </div>
+          <span
+            class="px-2.5 py-1 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 rounded-full border border-emerald-200 dark:border-emerald-800 shrink-0"
+          >
+            +{$dashboardStats.growthPct || 24.5}%
+          </span>
+        </div>
+
+        <!-- Dynamic Revenue Progress Bars -->
+        <div class="space-y-3 pt-2">
+          {#each chartItems as item}
+            {@const widthPct = Math.max(5, (item.rev / maxRev) * 100)}
+            <div class="space-y-1">
+              <div class="flex items-center justify-between text-xs font-bold">
+                <span class="text-slate-600 dark:text-slate-400 w-12 truncate"
+                  >{item.label}</span
+                >
+                <span class="text-slate-800 dark:text-white font-mono"
+                  >{formatRupiah(item.rev)}</span
+                >
+              </div>
+              <div
+                class="w-full h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden"
+              >
+                <div
+                  class="h-full bg-gradient-to-r from-teal-500 via-blue-500 to-indigo-600 rounded-full transition-all duration-500 shadow-sm"
+                  style="width: {widthPct}%"
+                ></div>
+              </div>
+            </div>
+          {:else}
+            <div class="py-8 text-center text-xs text-slate-400">
+              Tidak ada data penjualan.
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </div>
 
   <!-- Recent Activity & Quick Progress Grid -->
@@ -299,7 +315,7 @@
             {#if $isLoading}
               <TableRowSkeleton cols={5} rows={5} />
             {:else}
-              {#each recentOrders as ord}
+              {#each recentOrdersList as ord}
                 <tr
                   class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
                 >
@@ -357,7 +373,7 @@
         {#if $isLoading}
           <ProgressSkeleton count={4} />
         {:else}
-          {#each activeLaundryProgress as ord}
+          {#each activeProgressList as ord}
             <div
               class="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 space-y-2"
             >
