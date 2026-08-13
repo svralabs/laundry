@@ -30,7 +30,7 @@
   const publicGasUrl = env.PUBLIC_GAS_URL || '';
 
   $: currentPath = $page.url.pathname as string;
-  $: showTimeframeFilter = ["/", "/expenses", "/profit-loss", "/history", "/status"].includes(currentPath);
+  $: showTimeframeFilter = ["/", "/expenses", "/profit-loss", "/history"].includes(currentPath);
 
   const timeframeLabels: Record<TimeframeFilter, string> = {
     today: "Hari Ini",

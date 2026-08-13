@@ -68,15 +68,14 @@ function handleApiAction(action, payload) {
   if (action === 'getDashboardBatch') {
     var timeframe = (payload && payload.timeframe) ? payload.timeframe : 'today';
     var stats = getDashboardStatsData(timeframe);
-    var recentOrdersRes = getPagedOrders(1, 5, '', 'Semua', 'Semua', timeframe, 'invoice', 'desc');
     var statusSummary = getStatusSummaryData();
 
     return {
       success: true,
       data: {
         stats: stats,
-        recentOrders: recentOrdersRes ? recentOrdersRes.data : [],
-        recentOrdersMeta: recentOrdersRes ? recentOrdersRes.meta : null,
+        recentOrders: stats.recentOrders || [],
+        recentOrdersMeta: { total: stats.periodOrdersCount || 0, page: 1, pageSize: 5, totalPages: 1, from: 1, to: Math.min(5, stats.periodOrdersCount || 0) },
         statusSummary: statusSummary
       }
     };
@@ -298,13 +297,7 @@ function getCachedData(key, fetchFn, ttl) {
     try { return JSON.parse(cached); } catch(e) {}
   }
   var data = fetchFn();
-  try {
-    // CacheService max 100KB per key. Untuk master data services/settings ini aman.
-    cache.put(key, JSON.stringify(data), ttl || 21600);
-  } catch(e) {
-    // Jika data > 100KB, abaikan cache dan langsung kembalikan
-    Logger.log('Cache put failed for ' + key + ': ' + e.toString());
-  }
+  safeCachePut(key, JSON.stringify(data), ttl || 21600);
   return data;
 }
 
@@ -384,13 +377,19 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
 
   if (lastRow <= 1) {
     var emptyRes = { success: true, data: [], meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0, from: 0, to: 0 } };
-    try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(emptyRes), 300); } catch(e) {}
+    safeCachePut(cacheKey, JSON.stringify(emptyRes), 300);
     return emptyRes;
   }
 
+  var isSearching = (q && q.trim().length > 0);
+  var maxScan = isSearching ? (lastRow - 1) : Math.min(3000, lastRow - 1);
+  var startRow = lastRow - maxScan + 1;
+
   var numCols = HEADERS_MAP['orders'].length;
+  trackSheetsApiCall();
   var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
-  var allData = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
+  trackSheetsApiCall();
+  var allData = sheet.getRange(startRow, 1, maxScan, numCols).getValues();
 
   var todayStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
   var qLower = q ? q.toString().toLowerCase() : '';
@@ -452,7 +451,7 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
   try {
     var jsonStr = JSON.stringify(result);
     if (jsonStr.length < 95000) {
-      CacheService.getScriptCache().put(cacheKey, jsonStr, 300);
+      safeCachePut(cacheKey, jsonStr, 300);
     }
   } catch(e) {}
 
@@ -479,13 +478,19 @@ function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
 
   if (lastRow <= 1) {
     var emptyRes = { success: true, data: [], meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0, from: 0, to: 0 } };
-    try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(emptyRes), 180); } catch(e) {}
+    safeCachePut(cacheKey, JSON.stringify(emptyRes), 180);
     return emptyRes;
   }
 
+  var isSearching = (q && q.trim().length > 0);
+  var maxScan = isSearching ? (lastRow - 1) : Math.min(3000, lastRow - 1);
+  var startRow = lastRow - maxScan + 1;
+
   var numCols = HEADERS_MAP['customers'].length;
+  trackSheetsApiCall();
   var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
-  var allData = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
+  trackSheetsApiCall();
+  var allData = sheet.getRange(startRow, 1, maxScan, numCols).getValues();
 
   var qLower = q ? q.toString().toLowerCase() : '';
   var filtered = [];
@@ -539,7 +544,7 @@ function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
   try {
     var jsonStr = JSON.stringify(result);
     if (jsonStr.length < 95000) {
-      CacheService.getScriptCache().put(cacheKey, jsonStr, 180);
+      safeCachePut(cacheKey, jsonStr, 180);
     }
   } catch(e) {}
 
@@ -623,13 +628,19 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
       meta: { total: 0, page: page, pageSize: pageSize, totalPages: 0, from: 0, to: 0 },
       summary: { totalExpenses: 0, byCategory: byCategory, totalCount: 0 }
     };
-    try { CacheService.getScriptCache().put(cacheKey, JSON.stringify(emptyRes), 300); } catch(e) {}
+    safeCachePut(cacheKey, JSON.stringify(emptyRes), 300);
     return emptyRes;
   }
 
+  var isSearching = (q && q.trim().length > 0);
+  var maxScan = isSearching ? (lastRow - 1) : Math.min(3000, lastRow - 1);
+  var startRow = lastRow - maxScan + 1;
+
   var numCols = HEADERS_MAP['expenses'].length;
+  trackSheetsApiCall();
   var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
-  var data = sheet.getRange(2, 1, lastRow - 1, numCols).getValues();
+  trackSheetsApiCall();
+  var data = sheet.getRange(startRow, 1, maxScan, numCols).getValues();
 
   var todayStr = Utilities.formatDate(new Date(), 'Asia/Jakarta', 'yyyy-MM-dd');
   var filtered = [];
@@ -707,7 +718,7 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
   try {
     var jsonStr = JSON.stringify(result);
     if (jsonStr.length < 95000) {
-      CacheService.getScriptCache().put(cacheKey, jsonStr, 300);
+      safeCachePut(cacheKey, jsonStr, 300);
     }
   } catch(e) {}
 
@@ -742,9 +753,11 @@ function getProfitLossData(timeframe, monthFilter, yearFilter) {
     }
 
     if (ordSheet.getLastRow() > 1) {
+      trackSheetsApiCall();
       var ordHeaders = ordSheet.getRange(1, 1, 1, ordSheet.getLastColumn()).getValues()[0];
       var scanCount = Math.min(5000, ordSheet.getLastRow() - 1);
       var startRow = ordSheet.getLastRow() - scanCount + 1;
+      trackSheetsApiCall();
       var ordData = ordSheet.getRange(startRow, 1, scanCount, ordHeaders.length).getValues();
 
       for (var i = 0; i < ordData.length; i++) {
@@ -770,7 +783,9 @@ function getProfitLossData(timeframe, monthFilter, yearFilter) {
     }
 
     if (expSheet.getLastRow() > 1) {
+      trackSheetsApiCall();
       var expHeaders = expSheet.getRange(1, 1, 1, expSheet.getLastColumn()).getValues()[0];
+      trackSheetsApiCall();
       var expData = expSheet.getRange(2, 1, expSheet.getLastRow() - 1, expHeaders.length).getValues();
 
       for (var e = 0; e < expData.length; e++) {
@@ -849,6 +864,8 @@ function getDashboardStatsData(timeframe) {
       };
     }
 
+    trackSheetsApiCall();
+
     var headers = ordSheet.getRange(1, 1, 1, ordSheet.getLastColumn()).getValues()[0];
     var today = new Date().toISOString().slice(0, 10);
     var now = new Date();
@@ -857,6 +874,7 @@ function getDashboardStatsData(timeframe) {
 
     var scanCount = Math.min(5000, lastOrdRow - 1);
     var startRow = lastOrdRow - scanCount + 1;
+    trackSheetsApiCall();
     var data = ordSheet.getRange(startRow, 1, scanCount, headers.length).getValues();
 
     var todayOrders = 0;
@@ -901,20 +919,37 @@ function getDashboardStatsData(timeframe) {
     var recentOrders = [];
     var activeProgress = [];
 
+    var tIdx = headers.indexOf('tanggal');
+    var sIdx = headers.indexOf('status');
+    var totIdx = headers.indexOf('total');
+    var bIdx = headers.indexOf('berat');
+    var cIdx = headers.indexOf('created_at');
+
+    var weekStartDt = new Date(now.getTime() - 6 * 86400000);
+    var weekStartStr = weekStartDt.toISOString().slice(0, 10);
+
     for (var i = data.length - 1; i >= 0; i--) {
       var row = data[i];
-      
-      var obj = {};
-      for (var j = 0; j < headers.length; j++) {
-        var val = row[j];
-        if (val instanceof Date) val = val.toISOString().slice(0, 10);
-        obj[headers[j]] = val;
-      }
+      var tDate = row[tIdx];
+      if (tDate instanceof Date) tDate = tDate.toISOString().slice(0, 10);
+      else tDate = (tDate || '').toString();
 
-      var tDate = obj['tanggal'] || '';
-      var status = obj['status'] || '';
-      var total = parseFloat(obj['total']) || 0;
-      var berat = parseFloat(obj['berat']) || 0;
+      var status = (row[sIdx] || '').toString();
+      var total = parseFloat(row[totIdx]) || 0;
+      var berat = parseFloat(row[bIdx]) || 0;
+
+      var needsObj = (recentOrders.length < 5) || (activeProgress.length < 4 && status !== 'Diambil');
+      var obj = null;
+      if (needsObj || (timeframe === 'today' && tDate === today)) {
+        obj = {};
+        for (var j = 0; j < headers.length; j++) {
+          var val = row[j];
+          if (val instanceof Date) val = val.toISOString().slice(0, 10);
+          obj[headers[j]] = val;
+        }
+        if (recentOrders.length < 5) recentOrders.push(obj);
+        if (activeProgress.length < 4 && status !== 'Diambil') activeProgress.push(obj);
+      }
 
       if (tDate === today) {
         todayOrders++;
@@ -927,21 +962,26 @@ function getDashboardStatsData(timeframe) {
         siapDiambil++;
       }
 
-      if (recentOrders.length < 5) {
-        recentOrders.push(obj);
+      var inTimeframe = false;
+      if (!timeframe || timeframe === 'all') {
+        inTimeframe = true;
+      } else if (timeframe === 'today') {
+        inTimeframe = (tDate === today);
+      } else if (timeframe === 'week') {
+        inTimeframe = (tDate >= weekStartStr && tDate <= today);
+      } else if (timeframe === 'month') {
+        inTimeframe = tDate.startsWith(currMonth);
+      } else if (timeframe === 'year') {
+        inTimeframe = tDate.startsWith(currYear);
       }
 
-      if (activeProgress.length < 4 && status !== 'Diambil') {
-        activeProgress.push(obj);
-      }
-
-      if (isDateInTimeframe(tDate, timeframe, today)) {
+      if (inTimeframe) {
         pendapatanPeriod += total;
         periodOrdersCount++;
         totalBeratPeriod += berat;
 
         if (timeframe === 'today') {
-          var createdAt = (obj['created_at'] || '').toString();
+          var createdAt = obj ? (obj['created_at'] || '').toString() : (row[cIdx] || '').toString();
           var hr = 8;
           if (createdAt && createdAt.indexOf('T') !== -1) {
             hr = parseInt(createdAt.split('T')[1].split(':')[0], 10) || 8;
@@ -994,7 +1034,9 @@ function getDashboardStatsData(timeframe) {
     var pengeluaranPeriod = 0;
     var expSheet = getOrCreateSheet('expenses');
     if (expSheet.getLastRow() > 1) {
+      trackSheetsApiCall();
       var expHeaders = expSheet.getRange(1, 1, 1, expSheet.getLastColumn()).getValues()[0];
+      trackSheetsApiCall();
       var expData = expSheet.getRange(2, 1, expSheet.getLastRow() - 1, expHeaders.length).getValues();
       for (var e = 0; e < expData.length; e++) {
         var er = expData[e];
@@ -1052,11 +1094,14 @@ function getStatusSummaryData() {
 
     if (lastRow <= 1) return summary;
 
+    trackSheetsApiCall();
+
     var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var statusColIdx = headers.indexOf('status');
     if (statusColIdx === -1) statusColIdx = 13;
 
     var totalRows = lastRow - 1;
+    trackSheetsApiCall();
     var statusCol = sheet.getRange(2, statusColIdx + 1, totalRows, 1).getValues();
 
     for (var i = 0; i < statusCol.length; i++) {
@@ -1105,6 +1150,7 @@ function getOrCreateSheet(sheetName) {
   // Inisialisasi header jika sheet kosong
   if (sheet.getLastRow() === 0) {
     var defaultHeaders = HEADERS_MAP[sheetName] || [];
+    trackSheetsApiCall();
     if (defaultHeaders.length > 0) sheet.appendRow(defaultHeaders);
   }
   return sheet;
@@ -1114,6 +1160,7 @@ function getOrCreateSheet(sheetName) {
 function getSheetData(sheetName) {
   var sheet = getOrCreateSheet(sheetName);
   if (sheet.getLastRow() < 2) return [];
+  trackSheetsApiCall();
   var data    = sheet.getDataRange().getValues();
   var headers = data[0];
   var rows    = [];
@@ -1149,8 +1196,10 @@ function appendSheetRow(sheetName, item) {
   try {
     lock.waitLock(10000);
     var sheet   = getOrCreateSheet(sheetName);
+    trackSheetsApiCall();
     var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     var row     = headers.map(function(h) { return item[h] !== undefined ? item[h] : ''; });
+    trackSheetsApiCall();
     sheet.appendRow(row);
   } finally {
     lock.releaseLock();
@@ -1166,6 +1215,7 @@ function updateSheetRow(sheetName, id, updateObj) {
   try {
     lock.waitLock(10000);
     var sheet   = getOrCreateSheet(sheetName);
+    trackSheetsApiCall();
     var data    = sheet.getDataRange().getValues();
     var headers = data[0];
     var idCol   = headers.indexOf('id');
@@ -1180,6 +1230,7 @@ function updateSheetRow(sheetName, id, updateObj) {
           if (colIdx !== -1) newRow[colIdx] = updateObj[key];
         }
         // P1-A: 1 setValues() menggantikan N setValue()
+        trackSheetsApiCall();
         sheet.getRange(i + 1, 1, 1, newRow.length).setValues([newRow]);
         break;
       }
@@ -1197,12 +1248,14 @@ function deleteSheetRow(sheetName, id) {
   try {
     lock.waitLock(10000);
     var sheet  = getOrCreateSheet(sheetName);
+    trackSheetsApiCall();
     var data   = sheet.getDataRange().getValues();
     var idCol  = data[0].indexOf('id');
     if (idCol === -1) return;
 
     for (var i = 1; i < data.length; i++) {
       if (data[i][idCol] == id) {
+        trackSheetsApiCall();
         sheet.deleteRow(i + 1);
         break;
       }
@@ -1223,6 +1276,7 @@ function setSheetData(sheetName, items) {
     var sheet   = getOrCreateSheet(sheetName);
     var headers = HEADERS_MAP[sheetName] || [];
     sheet.clear();
+    trackSheetsApiCall();
     sheet.appendRow(headers);
 
     if (items.length > 0) {
@@ -1230,6 +1284,7 @@ function setSheetData(sheetName, items) {
       var matrix = items.map(function(item) {
         return headers.map(function(h) { return item[h] !== undefined ? item[h] : ''; });
       });
+      trackSheetsApiCall();
       sheet.getRange(2, 1, matrix.length, headers.length).setValues(matrix);
     }
   } finally {
@@ -1250,19 +1305,51 @@ function updateSettingsRow(updateObj) {
       // Belum ada baris data, buat baru
       var headers = HEADERS_MAP['settings'];
       var newRow  = headers.map(function(h) { return updateObj[h] !== undefined ? updateObj[h] : ''; });
+      trackSheetsApiCall();
       sheet.appendRow(newRow);
     } else {
+      trackSheetsApiCall();
       var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      trackSheetsApiCall();
       var current = sheet.getRange(2, 1, 1, headers.length).getValues()[0];
       var newRow  = current.slice();
       for (var key in updateObj) {
         var colIdx = headers.indexOf(key);
         if (colIdx !== -1) newRow[colIdx] = updateObj[key];
       }
+      trackSheetsApiCall();
       sheet.getRange(2, 1, 1, newRow.length).setValues([newRow]);
     }
   } finally {
     lock.releaseLock();
+  }
+}
+
+// ─────────────────────────────────────────────
+// CACHING & PERFORMANCE WRAPPER
+// ─────────────────────────────────────────────
+
+/**
+ * Memastikan payload tidak melebihi batas ~100KB CacheService
+ */
+function safeCachePut(key, jsonStr, ttl) {
+  try {
+    var sizeBytes = Utilities.newBlob(jsonStr).getBytes().length;
+    if (sizeBytes > 90000) {
+      Logger.log('CACHE_SKIPPED: Payload terlalu besar (' + sizeBytes + ' bytes) untuk key: ' + key);
+      
+      // Increment monitoring counter di PropertiesService
+      var props = PropertiesService.getScriptProperties();
+      var count = parseInt(props.getProperty('CACHE_SKIPPED_COUNT') || '0', 10);
+      props.setProperty('CACHE_SKIPPED_COUNT', (count + 1).toString());
+      
+      return false;
+    }
+    CacheService.getScriptCache().put(key, jsonStr, ttl);
+    return true;
+  } catch(e) {
+    Logger.log('CACHE_ERROR: Gagal menyimpan cache untuk key ' + key + ' -> ' + e.toString());
+    return false;
   }
 }
 
@@ -1349,6 +1436,7 @@ function seedDummyData() {
   var customerSheet = ss.getSheetByName('customers');
   if (!customerSheet) {
     customerSheet = ss.insertSheet('customers');
+    trackSheetsApiCall();
     customerSheet.appendRow(['id', 'nama', 'hp', 'alamat', 'created_at']);
   }
 
@@ -1372,6 +1460,7 @@ function seedDummyData() {
 
     if (chunkRows.length > 0) {
       var lastRow = customerSheet.getLastRow();
+      trackSheetsApiCall();
       customerSheet.getRange(lastRow + 1, 1, chunkRows.length, 5).setValues(chunkRows);
       SpreadsheetApp.flush();
     }
@@ -1381,6 +1470,7 @@ function seedDummyData() {
   var orderSheet = ss.getSheetByName('orders');
   if (!orderSheet) {
     orderSheet = ss.insertSheet('orders');
+    trackSheetsApiCall();
     orderSheet.appendRow(['id', 'invoice', 'tanggal', 'customer_id', 'customer_nama', 'customer_hp', 'service_id', 'service_nama', 'berat', 'harga', 'subtotal', 'diskon', 'total', 'status', 'estimasi', 'catatan', 'created_at', 'updated_at']);
   }
 
@@ -1447,6 +1537,7 @@ function seedDummyData() {
 
     if (chunkRows.length > 0) {
       var lastOrdRow = orderSheet.getLastRow();
+      trackSheetsApiCall();
       orderSheet.getRange(lastOrdRow + 1, 1, chunkRows.length, 18).setValues(chunkRows);
       SpreadsheetApp.flush();
     }
@@ -1456,6 +1547,7 @@ function seedDummyData() {
   var expSheet = ss.getSheetByName('expenses');
   if (!expSheet) {
     expSheet = ss.insertSheet('expenses');
+    trackSheetsApiCall();
     expSheet.appendRow(['id', 'tanggal', 'kategori', 'deskripsi', 'jumlah', 'created_at']);
   }
 
@@ -1492,6 +1584,7 @@ function seedDummyData() {
 
   if (expRows.length > 0) {
     var lastExpRow = expSheet.getLastRow();
+    trackSheetsApiCall();
     expSheet.getRange(lastExpRow + 1, 1, expRows.length, 6).setValues(expRows);
     SpreadsheetApp.flush();
   }
@@ -1502,4 +1595,22 @@ function seedDummyData() {
   } catch(e) {}
 
   Logger.log('🔥 BERHASIL GENERATE DUMMY SKALA BESAR: ' + TOTAL_CUSTOMERS + ' Customers, ' + TOTAL_ORDERS + ' Orders, & 150 Expenses!');
+}
+
+
+// ─────────────────────────────────────────────
+// QUOTA MONITORING
+// ─────────────────────────────────────────────
+function trackSheetsApiCall(count) {
+  var c = count || 1;
+  try {
+    var cache = CacheService.getScriptCache();
+    var minuteKey = 'API_COUNT_' + new Date().toISOString().substring(0, 16);
+    var current = cache.get(minuteKey);
+    var newVal = (current ? parseInt(current, 10) : 0) + c;
+    cache.put(minuteKey, newVal.toString(), 120);
+    if (newVal >= 250 && newVal < 250 + c) {
+      Logger.log('WARNING: Sheets API Quota mendekati batas! (' + newVal + '/300 per menit)');
+    }
+  } catch(e) {}
 }

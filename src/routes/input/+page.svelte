@@ -368,4 +368,9 @@
 </div>
 
 <!-- Modal Quick Add Customer -->
-<CustomerModal bind:show={showAddCustomerModal} />
+<CustomerModal
+  bind:show={showAddCustomerModal}
+  onCreated={(newCust) => {
+    selectedCustomerId = newCust.id;
+  }}
+/>

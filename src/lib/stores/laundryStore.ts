@@ -3,6 +3,7 @@ import type { Customer, Order, Service, Settings, OrderStatus, ToastMessage, Cap
 import { generateInvoiceNumber } from '$utils/formatters';
 import { fetchFromGAS, postToGAS } from '$services/api';
 import { env } from '$env/dynamic/public'; // Using dynamic to ensure it reads from process.env on server if needed, or static
+import dayjs from 'dayjs';
 
 // Fallback to active deployed GAS URL if not configured in .env
 const PUBLIC_GAS_URL = env.PUBLIC_GAS_URL || 'https://script.google.com/macros/s/AKfycbyLccmrftjbSQotaxEPf3AvcR3zTrMEe6sla8PNEi1Gdqo4vxVfFhU-UFtb3duQGKU-Lg/exec';
@@ -105,21 +106,23 @@ export function removeToast(id: string) {
 
 // Stats Derived Store
 export const stats = derived([orders, customers], ([$orders, $customers]) => {
-  const today = new Date().toISOString().slice(0, 10);
-  const currentMonth = today.slice(0, 7);
+  const today = dayjs().format('YYYY-MM-DD');
+  const currentMonth = dayjs().format('YYYY-MM');
 
   const totalCustomers = $customers.length;
   const todayOrders = $orders.filter((o) => o.tanggal === today).length;
   const sedangDicuci = $orders.filter((o) => o.status === 'Masuk' || o.status === 'Dicuci' || o.status === 'Disetrika').length;
   const siapDiambil = $orders.filter((o) => o.status === 'Selesai').length;
 
+  // Total omset dari seluruh transaksi yang dibuat HARI INI
   const pendapatanHariIni = $orders
     .filter((o) => o.tanggal === today)
-    .reduce((sum, o) => sum + o.total, 0);
+    .reduce((sum, o) => sum + (o.total || 0), 0);
 
+  // Total omset dari seluruh transaksi yang dibuat BULAN INI (Hari Ini dipastikan bagian dari Bulan Ini)
   const pendapatanBulanIni = $orders
     .filter((o) => o.tanggal && o.tanggal.startsWith(currentMonth))
-    .reduce((sum, o) => sum + o.total, 0);
+    .reduce((sum, o) => sum + (o.total || 0), 0);
 
   return {
     totalCustomers,
@@ -196,11 +199,23 @@ interface BufferState<T> {
   data: T[];
   serverTotal: number;
   serverTotalPages: number;
+  chunks?: number[];
 }
 
 let ordersBuffer: BufferState<Order> | null = null;
 let customersBuffer: BufferState<Customer> | null = null;
 let expensesBuffer: BufferState<Expense> | null = null;
+
+const activeFetchControllers: Record<string, AbortController> = {};
+
+function getAbortSignal(key: string): AbortSignal {
+  if (activeFetchControllers[key]) {
+    activeFetchControllers[key].abort();
+  }
+  const controller = new AbortController();
+  activeFetchControllers[key] = controller;
+  return controller.signal;
+}
 
 export function clearClientBuffers() {
   ordersBuffer = null;
@@ -218,7 +233,7 @@ export async function loadCustomers(page = 1, pageSize = 10, q = '', sortKey?: s
   if (
     customersBuffer &&
     customersBuffer.key === filterKey &&
-    (customersBuffer.data.length >= endIdx || customersBuffer.data.length === customersBuffer.serverTotal)
+    (customersBuffer.data[startIdx] !== undefined || startIdx >= customersBuffer.serverTotal)
   ) {
     const sliced = customersBuffer.data.slice(startIdx, endIdx);
     customers.set(sliced);
@@ -238,9 +253,10 @@ export async function loadCustomers(page = 1, pageSize = 10, q = '', sortKey?: s
   const chunkSize = 50;
   const chunkPage = Math.floor(startIdx / chunkSize) + 1;
 
+  const signal = getAbortSignal('loadCustomers');
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page: chunkPage, pageSize: chunkSize, q, sortKey, sortDir });
+    const res = await fetchFromGAS<Customer[]>(PUBLIC_GAS_URL, 'getCustomers', { page: chunkPage, pageSize: chunkSize, q, sortKey, sortDir }, signal);
     if (res.success && Array.isArray(res.data)) {
       const serverTotal = res.meta?.total || res.data.length;
       const serverTotalPages = Math.ceil(serverTotal / pageSize) || 1;
@@ -248,15 +264,36 @@ export async function loadCustomers(page = 1, pageSize = 10, q = '', sortKey?: s
       if (!customersBuffer || customersBuffer.key !== filterKey || chunkPage === 1) {
         customersBuffer = {
           key: filterKey,
-          data: res.data,
+          data: [],
           serverTotal,
-          serverTotalPages
+          serverTotalPages,
+          chunks: []
         };
-      } else {
-        customersBuffer.data = [...customersBuffer.data, ...res.data];
-        customersBuffer.serverTotal = serverTotal;
-        customersBuffer.serverTotalPages = serverTotalPages;
       }
+      
+      const chunkStartIdx = (chunkPage - 1) * chunkSize;
+      for (let i = 0; i < res.data.length; i++) {
+        customersBuffer.data[chunkStartIdx + i] = res.data[i];
+      }
+      
+      if (!customersBuffer.chunks) customersBuffer.chunks = [];
+      if (!customersBuffer.chunks.includes(chunkPage)) {
+        customersBuffer.chunks.push(chunkPage);
+      }
+      
+      const MAX_CHUNKS = 6;
+      while (customersBuffer.chunks.length > MAX_CHUNKS) {
+        const oldestChunk = customersBuffer.chunks.shift();
+        if (oldestChunk !== undefined) {
+           const oldestStartIdx = (oldestChunk - 1) * chunkSize;
+           for (let i = 0; i < chunkSize; i++) {
+             delete customersBuffer.data[oldestStartIdx + i];
+           }
+        }
+      }
+      
+      customersBuffer.serverTotal = serverTotal;
+      customersBuffer.serverTotalPages = serverTotalPages;
 
       const sliced = customersBuffer.data.slice(startIdx, endIdx);
       customers.set(sliced);
@@ -272,10 +309,11 @@ export async function loadCustomers(page = 1, pageSize = 10, q = '', sortKey?: s
         hasMore: endIdx < serverTotal
       });
     }
-  } catch (e) {
+  } catch (e: any) {
+    if (e.name === 'AbortError') return;
     console.error('[GAS API] Failed to load customers:', e);
   } finally {
-    isLoading.set(false);
+    if (!signal.aborted) isLoading.set(false);
   }
 }
 
@@ -290,7 +328,7 @@ export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua'
   if (
     ordersBuffer &&
     ordersBuffer.key === filterKey &&
-    (ordersBuffer.data.length >= endIdx || ordersBuffer.data.length === ordersBuffer.serverTotal)
+    (ordersBuffer.data[startIdx] !== undefined || startIdx >= ordersBuffer.serverTotal)
   ) {
     const sliced = ordersBuffer.data.slice(startIdx, endIdx);
     orders.set(sliced);
@@ -310,9 +348,10 @@ export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua'
   const chunkSize = 50;
   const chunkPage = Math.floor(startIdx / chunkSize) + 1;
 
+  const signal = getAbortSignal('loadOrders');
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page: chunkPage, pageSize: chunkSize, statusFilter, yearFilter, q, timeframe: tf, sortKey, sortDir });
+    const res = await fetchFromGAS<Order[]>(PUBLIC_GAS_URL, 'getOrders', { page: chunkPage, pageSize: chunkSize, statusFilter, yearFilter, q, timeframe: tf, sortKey, sortDir }, signal);
     if (res.success && Array.isArray(res.data)) {
       const serverTotal = res.meta?.total || res.data.length;
       const serverTotalPages = Math.ceil(serverTotal / pageSize) || 1;
@@ -320,15 +359,36 @@ export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua'
       if (!ordersBuffer || ordersBuffer.key !== filterKey || chunkPage === 1) {
         ordersBuffer = {
           key: filterKey,
-          data: res.data,
+          data: [],
           serverTotal,
-          serverTotalPages
+          serverTotalPages,
+          chunks: []
         };
-      } else {
-        ordersBuffer.data = [...ordersBuffer.data, ...res.data];
-        ordersBuffer.serverTotal = serverTotal;
-        ordersBuffer.serverTotalPages = serverTotalPages;
       }
+      
+      const chunkStartIdx = (chunkPage - 1) * chunkSize;
+      for (let i = 0; i < res.data.length; i++) {
+        ordersBuffer.data[chunkStartIdx + i] = res.data[i];
+      }
+      
+      if (!ordersBuffer.chunks) ordersBuffer.chunks = [];
+      if (!ordersBuffer.chunks.includes(chunkPage)) {
+        ordersBuffer.chunks.push(chunkPage);
+      }
+      
+      const MAX_CHUNKS = 6;
+      while (ordersBuffer.chunks.length > MAX_CHUNKS) {
+        const oldestChunk = ordersBuffer.chunks.shift();
+        if (oldestChunk !== undefined) {
+           const oldestStartIdx = (oldestChunk - 1) * chunkSize;
+           for (let i = 0; i < chunkSize; i++) {
+             delete ordersBuffer.data[oldestStartIdx + i];
+           }
+        }
+      }
+      
+      ordersBuffer.serverTotal = serverTotal;
+      ordersBuffer.serverTotalPages = serverTotalPages;
 
       const sliced = ordersBuffer.data.slice(startIdx, endIdx);
       orders.set(sliced);
@@ -344,10 +404,11 @@ export async function loadOrders(page = 1, pageSize = 10, statusFilter = 'Semua'
         hasMore: endIdx < serverTotal
       });
     }
-  } catch (e) {
+  } catch (e: any) {
+    if (e.name === 'AbortError') return;
     console.error('[GAS API] Failed to load orders:', e);
   } finally {
-    isLoading.set(false);
+    if (!signal.aborted) isLoading.set(false);
   }
 }
 
@@ -362,7 +423,7 @@ export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Se
   if (
     expensesBuffer &&
     expensesBuffer.key === filterKey &&
-    (expensesBuffer.data.length >= endIdx || expensesBuffer.data.length === expensesBuffer.serverTotal)
+    (expensesBuffer.data[startIdx] !== undefined || startIdx >= expensesBuffer.serverTotal)
   ) {
     const sliced = expensesBuffer.data.slice(startIdx, endIdx);
     expenses.set(sliced);
@@ -382,9 +443,10 @@ export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Se
   const chunkSize = 50;
   const chunkPage = Math.floor(startIdx / chunkSize) + 1;
 
+  const signal = getAbortSignal('loadExpenses');
   isLoading.set(true);
   try {
-    const res = await fetchFromGAS<Expense[]>(PUBLIC_GAS_URL, 'getExpenses', { page: chunkPage, pageSize: chunkSize, categoryFilter, yearFilter, q, timeframe: tf, sortKey, sortDir });
+    const res = await fetchFromGAS<Expense[]>(PUBLIC_GAS_URL, 'getExpenses', { page: chunkPage, pageSize: chunkSize, categoryFilter, yearFilter, q, timeframe: tf, sortKey, sortDir }, signal);
     if (res.success && Array.isArray(res.data)) {
       const serverTotal = res.meta?.total || res.data.length;
       const serverTotalPages = Math.ceil(serverTotal / pageSize) || 1;
@@ -392,15 +454,36 @@ export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Se
       if (!expensesBuffer || expensesBuffer.key !== filterKey || chunkPage === 1) {
         expensesBuffer = {
           key: filterKey,
-          data: res.data,
+          data: [],
           serverTotal,
-          serverTotalPages
+          serverTotalPages,
+          chunks: []
         };
-      } else {
-        expensesBuffer.data = [...expensesBuffer.data, ...res.data];
-        expensesBuffer.serverTotal = serverTotal;
-        expensesBuffer.serverTotalPages = serverTotalPages;
       }
+      
+      const chunkStartIdx = (chunkPage - 1) * chunkSize;
+      for (let i = 0; i < res.data.length; i++) {
+        expensesBuffer.data[chunkStartIdx + i] = res.data[i];
+      }
+      
+      if (!expensesBuffer.chunks) expensesBuffer.chunks = [];
+      if (!expensesBuffer.chunks.includes(chunkPage)) {
+        expensesBuffer.chunks.push(chunkPage);
+      }
+      
+      const MAX_CHUNKS = 6;
+      while (expensesBuffer.chunks.length > MAX_CHUNKS) {
+        const oldestChunk = expensesBuffer.chunks.shift();
+        if (oldestChunk !== undefined) {
+           const oldestStartIdx = (oldestChunk - 1) * chunkSize;
+           for (let i = 0; i < chunkSize; i++) {
+             delete expensesBuffer.data[oldestStartIdx + i];
+           }
+        }
+      }
+      
+      expensesBuffer.serverTotal = serverTotal;
+      expensesBuffer.serverTotalPages = serverTotalPages;
 
       const sliced = expensesBuffer.data.slice(startIdx, endIdx);
       expenses.set(sliced);
@@ -420,10 +503,11 @@ export async function loadExpenses(page = 1, pageSize = 10, categoryFilter = 'Se
         hasMore: endIdx < serverTotal
       });
     }
-  } catch (e) {
+  } catch (e: any) {
+    if (e.name === 'AbortError') return;
     console.error('[GAS API] Failed to load expenses:', e);
   } finally {
-    isLoading.set(false);
+    if (!signal.aborted) isLoading.set(false);
   }
 }
 
@@ -570,14 +654,29 @@ export async function pushAllToGAS() {
 
 // Action functions
 export function addCustomer(cust: Omit<Customer, 'id' | 'created_at'>) {
-  const id = `CUST-${String(get(customers).length + 1).padStart(3, '0')}`;
+  const currentCusts = get(customers);
+  let maxIdNum = 0;
+  for (const c of currentCusts) {
+    if (c.id) {
+      const matches = c.id.match(/\d+/g);
+      if (matches) {
+        const num = parseInt(matches[matches.length - 1], 10);
+        if (!isNaN(num) && num > maxIdNum) {
+          maxIdNum = num;
+        }
+      }
+    }
+  }
+  const nextNum = maxIdNum + 1;
+  const id = `CUST-${String(nextNum).padStart(3, '0')}`;
+
   const newCust: Customer = {
     ...cust,
     id,
-    created_at: new Date().toISOString().slice(0, 10)
+    created_at: dayjs().format('YYYY-MM-DD')
   };
   customers.update((all) => [newCust, ...all]);
-  addToast('Berhasil', `Pelanggan ${cust.nama} berhasil ditambahkan!`, 'success');
+  addToast('Berhasil', `Pelanggan ${cust.nama} berhasil ditambahkan! (${id})`, 'success');
 
   if (PUBLIC_GAS_URL) {
     postToGAS(PUBLIC_GAS_URL, 'addCustomer', newCust).catch((err: any) => {
@@ -615,9 +714,31 @@ export function deleteCustomer(id: string) {
 
 export function createOrder(orderInput: Omit<Order, 'id' | 'invoice' | 'created_at' | 'updated_at'>): Order {
   const allOrders = get(orders);
-  const invoice = generateInvoiceNumber(allOrders.length);
-  const id = `ORD-${String(allOrders.length + 1).padStart(3, '0')}`;
-  const now = new Date().toISOString().replace('T', ' ').slice(0, 16);
+  let maxOrdNum = 0;
+  let maxInvSeqForToday = 0;
+  const dateStr = dayjs().format('YYYYMMDD');
+
+  for (const o of allOrders) {
+    if (o.id) {
+      const matches = o.id.match(/\d+/g);
+      if (matches) {
+        const num = parseInt(matches[matches.length - 1], 10);
+        if (!isNaN(num) && num > maxOrdNum) maxOrdNum = num;
+      }
+    }
+    if (o.invoice && o.invoice.includes(dateStr)) {
+      const parts = o.invoice.split('-');
+      const seq = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(seq) && seq > maxInvSeqForToday) maxInvSeqForToday = seq;
+    }
+  }
+
+  const nextOrdNum = maxOrdNum + 1;
+  const nextInvSeq = maxInvSeqForToday + 1;
+
+  const id = `ORD-${String(nextOrdNum).padStart(3, '0')}`;
+  const invoice = `INV-${dateStr}-${String(nextInvSeq).padStart(3, '0')}`;
+  const now = dayjs().format('YYYY-MM-DD HH:mm');
 
   const newOrder: Order = {
     ...orderInput,
@@ -646,7 +767,7 @@ export function createOrder(orderInput: Omit<Order, 'id' | 'invoice' | 'created_
 }
 
 export function updateOrderStatus(orderId: string, newStatus: OrderStatus) {
-  const now = new Date().toISOString().replace('T', ' ').slice(0, 16);
+  const now = dayjs().format('YYYY-MM-DD HH:mm');
   let updatedInvoice = '';
 
   orders.update((all) =>

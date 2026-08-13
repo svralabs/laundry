@@ -26,31 +26,29 @@
   let searchTimeout: any;
 
   $: {
-    if ($timeframeFilter) {
-      loadStatusSummary();
-      loadOrders(1, 10, activeTabFilter, 'Semua', searchInput, $timeframeFilter);
-    }
+    // Refresh when status summary needs to be loaded
+    loadStatusSummary();
   }
 
   onMount(() => {
-    // Loaded via reactivity block above
+    loadOrders(1, 10, activeTabFilter, 'Semua', searchInput, 'all');
   });
 
   function selectTab(st: OrderStatus | 'Semua') {
     activeTabFilter = st;
-    loadOrders(1, 10, activeTabFilter, 'Semua', searchInput, $timeframeFilter);
+    loadOrders(1, 10, activeTabFilter, 'Semua', searchInput, 'all');
   }
 
   function handleSearchInput() {
     if (searchTimeout) clearTimeout(searchTimeout);
     searchTimeout = setTimeout(() => {
-      loadOrders(1, 10, activeTabFilter, 'Semua', searchInput, $timeframeFilter);
+      loadOrders(1, 10, activeTabFilter, 'Semua', searchInput, 'all');
     }, 400);
   }
 
   function goToPage(p: number) {
     if (p < 1 || p > $paginationState.totalPages) return;
-    loadOrders(p, 10, activeTabFilter, 'Semua', searchInput, $timeframeFilter);
+    loadOrders(p, 10, activeTabFilter, 'Semua', searchInput, 'all');
   }
 </script>
 

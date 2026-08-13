@@ -7,6 +7,7 @@
   export let show = false;
   export let editData: Customer | null = null;
   export let onClose = () => {};
+  export let onCreated: ((customer: Customer) => void) | undefined = undefined;
 
   let nama = '';
   let hp = '';
@@ -39,7 +40,10 @@
     if (editData) {
       updateCustomer(editData.id, { nama, hp, alamat });
     } else {
-      addCustomer({ nama, hp, alamat });
+      const created = addCustomer({ nama, hp, alamat });
+      if (onCreated && created) {
+        onCreated(created);
+      }
     }
 
     handleClose();

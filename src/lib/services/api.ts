@@ -1,6 +1,6 @@
 import type { APIResponse, Customer, Order, Service, Settings } from '$types/laundry';
 
-export async function fetchFromGAS<T>(scriptUrl: string, action: string, params: Record<string, any> = {}): Promise<APIResponse<T>> {
+export async function fetchFromGAS<T>(scriptUrl: string, action: string, params: Record<string, any> = {}, signal?: AbortSignal): Promise<APIResponse<T>> {
   if (!scriptUrl) {
     throw new Error('Google Apps Script URL belum dikonfigurasi.');
   }
@@ -20,7 +20,8 @@ export async function fetchFromGAS<T>(scriptUrl: string, action: string, params:
       method: 'GET',
       headers: {
         'Accept': 'application/json'
-      }
+      },
+      signal
     });
 
     if (!response.ok) {
@@ -35,7 +36,7 @@ export async function fetchFromGAS<T>(scriptUrl: string, action: string, params:
   }
 }
 
-export async function postToGAS<T>(scriptUrl: string, action: string, payload: any): Promise<APIResponse<T>> {
+export async function postToGAS<T>(scriptUrl: string, action: string, payload: any, signal?: AbortSignal): Promise<APIResponse<T>> {
   if (!scriptUrl) {
     throw new Error('Google Apps Script URL belum dikonfigurasi.');
   }
@@ -50,7 +51,8 @@ export async function postToGAS<T>(scriptUrl: string, action: string, payload: a
       body: JSON.stringify({
         action,
         payload
-      })
+      }),
+      signal
     });
 
     if (!response.ok) {
@@ -68,7 +70,7 @@ export async function postToGAS<T>(scriptUrl: string, action: string, payload: a
       url.searchParams.append('action', action);
       url.searchParams.append('payload', JSON.stringify(payload));
 
-      const res = await fetch(url.toString(), { method: 'GET' });
+      const res = await fetch(url.toString(), { method: 'GET', signal });
       if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
       return await res.json();
     } catch (fallbackErr: any) {
