@@ -381,8 +381,23 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
     return emptyRes;
   }
 
-  var isSearching = (q && q.trim().length > 0);
-  var maxScan = isSearching ? (lastRow - 1) : Math.min(3000, lastRow - 1);
+  // ── STEP 4: REVERSE SLICE (CONDITIONAL OPTIMIZATION) ──
+  // Reverse slice (membaca N baris terakhir saja dari dasar sheet) HANYA aman digunakan
+  // jika query BENERAN dalam kondisi DEFAULT (pasti mencari data terbaru):
+  // - Tidak ada pencarian teks (q kosong)
+  // - Filter status = 'Semua'
+  // - Filter tahun = 'Semua'
+  // - Timeframe = 'today' ATAU 'week'
+  //
+  // JIKA ADA search query (q terisi), statusFilter spesifik, yearFilter spesifik (misal 2023),
+  // atau timeframe 'month'/'year'/'all', MAKA WAJIB FULL SCAN seluruh row (lastRow - 1)
+  // agar TIDAK ADA DATA LAMA YANG MISS / TIDAK KENA SCAN!
+  var isDefaultQuery = (!q || q.toString().trim().length === 0) &&
+                       (!statusFilter || statusFilter === 'Semua') &&
+                       (!yearFilter || yearFilter === 'Semua') &&
+                       (timeframe === 'today' || timeframe === 'week');
+
+  var maxScan = isDefaultQuery ? Math.min(1000, lastRow - 1) : (lastRow - 1);
   var startRow = lastRow - maxScan + 1;
 
   var numCols = HEADERS_MAP['orders'].length;
@@ -632,8 +647,20 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
     return emptyRes;
   }
 
-  var isSearching = (q && q.trim().length > 0);
-  var maxScan = isSearching ? (lastRow - 1) : Math.min(3000, lastRow - 1);
+  // ── STEP 4: REVERSE SLICE (CONDITIONAL OPTIMIZATION) ──
+  // Reverse slice HANYA aman digunakan jika query BENERAN dalam kondisi DEFAULT:
+  // - Tidak ada kata kunci pencarian (q kosong)
+  // - Filter kategori = 'Semua'
+  // - Filter tahun = 'Semua'
+  // - Timeframe = 'today' ATAU 'week'
+  // JIKA ADA search query, categoryFilter spesifik, yearFilter spesifik, atau timeframe lama,
+  // MAKA WAJIB FULL SCAN seluruh row (lastRow - 1) agar tidak ada data lama yang terlewat!
+  var isDefaultQuery = (!q || q.toString().trim().length === 0) &&
+                       (!categoryFilter || categoryFilter === 'Semua') &&
+                       (!yearFilter || yearFilter === 'Semua') &&
+                       (timeframe === 'today' || timeframe === 'week');
+
+  var maxScan = isDefaultQuery ? Math.min(1000, lastRow - 1) : (lastRow - 1);
   var startRow = lastRow - maxScan + 1;
 
   var numCols = HEADERS_MAP['expenses'].length;
@@ -1207,59 +1234,64 @@ function appendSheetRow(sheetName, item) {
 }
 
 /**
- * P1-A + P1-C: updateSheetRow — batch write (1 setValues) + LockService.
- * Membaca semua data untuk mencari ID, lalu menulis satu baris sekaligus.
+ * STEP 5: Fast Row Index Finder pakai TextFinder (C++ Native di Sheets Engine).
+ * Menggantikan full sheet.getDataRange().getValues() saat mencari ID di baris write operation.
+ */
+function findRowIndexById(sheet, id) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return -1;
+
+  trackSheetsApiCall();
+  var idColRange = sheet.getRange(2, 1, lastRow - 1, 1);
+  var finder = idColRange.createTextFinder(id.toString()).matchEntireCell(true);
+  var match = finder.findNext();
+  return match ? match.getRow() : -1;
+}
+
+/**
+ * P1-A + P1-C + STEP 5: updateSheetRow — TextFinder + batch write (1 setValues) + LockService.
+ * Menggunakan TextFinder C++ native di kolom A untuk mencari ID secara instant.
  */
 function updateSheetRow(sheetName, id, updateObj) {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
-    var sheet   = getOrCreateSheet(sheetName);
-    trackSheetsApiCall();
-    var data    = sheet.getDataRange().getValues();
-    var headers = data[0];
-    var idCol   = headers.indexOf('id');
-    if (idCol === -1) return;
+    var sheet = getOrCreateSheet(sheetName);
+    var targetRowIndex = findRowIndexById(sheet, id);
+    if (targetRowIndex === -1) return;
 
-    for (var i = 1; i < data.length; i++) {
-      if (data[i][idCol] == id) {
-        // Copy baris yang ada, terapkan updateObj di atasnya
-        var newRow = data[i].slice();
-        for (var key in updateObj) {
-          var colIdx = headers.indexOf(key);
-          if (colIdx !== -1) newRow[colIdx] = updateObj[key];
-        }
-        // P1-A: 1 setValues() menggantikan N setValue()
-        trackSheetsApiCall();
-        sheet.getRange(i + 1, 1, 1, newRow.length).setValues([newRow]);
-        break;
-      }
+    var numCols = HEADERS_MAP[sheetName] ? HEADERS_MAP[sheetName].length : sheet.getLastColumn();
+    trackSheetsApiCall();
+    var headers = sheet.getRange(1, 1, 1, numCols).getValues()[0];
+    trackSheetsApiCall();
+    var currentRow = sheet.getRange(targetRowIndex, 1, 1, numCols).getValues()[0];
+
+    var newRow = currentRow.slice();
+    for (var key in updateObj) {
+      var colIdx = headers.indexOf(key);
+      if (colIdx !== -1) newRow[colIdx] = updateObj[key];
     }
+
+    trackSheetsApiCall();
+    sheet.getRange(targetRowIndex, 1, 1, newRow.length).setValues([newRow]);
   } finally {
     lock.releaseLock();
   }
 }
 
 /**
- * P1-C: deleteSheetRow dengan LockService.
+ * P1-C + STEP 5: deleteSheetRow dengan TextFinder + LockService.
  */
 function deleteSheetRow(sheetName, id) {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
-    var sheet  = getOrCreateSheet(sheetName);
-    trackSheetsApiCall();
-    var data   = sheet.getDataRange().getValues();
-    var idCol  = data[0].indexOf('id');
-    if (idCol === -1) return;
+    var sheet = getOrCreateSheet(sheetName);
+    var targetRowIndex = findRowIndexById(sheet, id);
+    if (targetRowIndex === -1) return;
 
-    for (var i = 1; i < data.length; i++) {
-      if (data[i][idCol] == id) {
-        trackSheetsApiCall();
-        sheet.deleteRow(i + 1);
-        break;
-      }
-    }
+    trackSheetsApiCall();
+    sheet.deleteRow(targetRowIndex);
   } finally {
     lock.releaseLock();
   }
