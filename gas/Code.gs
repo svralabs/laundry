@@ -826,7 +826,7 @@ function getProfitLossData(timeframe, monthFilter, yearFilter) {
   var currYear = (yearFilter || todayStr.slice(0, 4)).toString();
   var currMonthStr = monthFilter || todayStr.slice(0, 7);
 
-  return getCachedData('profit_loss_v2_' + timeframe + '_' + currMonthStr + '_' + currYear, function() {
+  return getCachedData('profit_loss_v3_' + timeframe + '_' + currMonthStr + '_' + currYear, function() {
     var ordSheet = getOrCreateSheet('orders');
     var expSheet = getOrCreateSheet('expenses');
 
@@ -847,24 +847,23 @@ function getProfitLossData(timeframe, monthFilter, yearFilter) {
       monthlyData.push({ month: mKey, label: monthNames[m], revenue: 0, expenses: 0, profit: 0 });
     }
 
-    if (ordSheet.getLastRow() > 1) {
+    var lastOrdRow = ordSheet.getLastRow();
+    if (lastOrdRow > 1) {
+      var scanCount = Math.min(5000, lastOrdRow - 1);
+      var startRow = lastOrdRow - scanCount + 1;
       trackSheetsApiCall();
       var ordHeaders = ordSheet.getRange(1, 1, 1, ordSheet.getLastColumn()).getValues()[0];
-      var scanCount = Math.min(5000, ordSheet.getLastRow() - 1);
-      var startRow = ordSheet.getLastRow() - scanCount + 1;
+      var tIdx = ordHeaders.indexOf('tanggal');
+      var totIdx = ordHeaders.indexOf('total');
       trackSheetsApiCall();
       var ordData = ordSheet.getRange(startRow, 1, scanCount, ordHeaders.length).getValues();
 
       for (var i = 0; i < ordData.length; i++) {
         var row = ordData[i];
-        var obj = {};
-        for (var j = 0; j < ordHeaders.length; j++) {
-          var val = row[j];
-          if (val instanceof Date) val = val.toISOString().slice(0, 10);
-          obj[ordHeaders[j]] = val;
-        }
-        var tDate = (obj['tanggal'] || '').toString();
-        var total = parseFloat(obj['total']) || 0;
+        var tDate = row[tIdx];
+        if (tDate instanceof Date) tDate = tDate.toISOString().slice(0, 10);
+        else tDate = (tDate || '').toString().slice(0, 10);
+        var total = parseFloat(row[totIdx]) || 0;
 
         if (tDate.slice(0, 4) === currYear) {
           var mIdx = parseInt(tDate.slice(5, 7), 10) - 1;
@@ -877,27 +876,27 @@ function getProfitLossData(timeframe, monthFilter, yearFilter) {
       }
     }
 
-    if (expSheet.getLastRow() > 1) {
+    var lastExpRow = expSheet.getLastRow();
+    if (lastExpRow > 1) {
       trackSheetsApiCall();
       var expHeaders = expSheet.getRange(1, 1, 1, expSheet.getLastColumn()).getValues()[0];
+      var eTIdx = expHeaders.indexOf('tanggal');
+      var eJIdx = expHeaders.indexOf('jumlah');
+      var eKIdx = expHeaders.indexOf('kategori');
       trackSheetsApiCall();
-      var expData = expSheet.getRange(2, 1, expSheet.getLastRow() - 1, expHeaders.length).getValues();
+      var expData = expSheet.getRange(2, 1, lastExpRow - 1, expHeaders.length).getValues();
 
       for (var e = 0; e < expData.length; e++) {
         var r = expData[e];
-        var o = {};
-        for (var k = 0; k < expHeaders.length; k++) {
-          var v = r[k];
-          if (v instanceof Date) v = v.toISOString().slice(0, 10);
-          o[expHeaders[k]] = v;
-        }
-        var eDate = (o['tanggal'] || '').toString();
-        var amount = parseFloat(o['jumlah']) || 0;
-        var cat = o['kategori'] || 'Operasional & Lain-lain';
+        var eDate = r[eTIdx];
+        if (eDate instanceof Date) eDate = eDate.toISOString().slice(0, 10);
+        else eDate = (eDate || '').toString().slice(0, 10);
+        var amount = parseFloat(r[eJIdx]) || 0;
+        var cat = (r[eKIdx] || 'Operasional & Lain-lain').toString().trim();
 
         if (eDate.slice(0, 4) === currYear) {
-          var mIdx = parseInt(eDate.slice(5, 7), 10) - 1;
-          if (mIdx >= 0 && mIdx < 12) monthlyData[mIdx].expenses += amount;
+          var mIdx2 = parseInt(eDate.slice(5, 7), 10) - 1;
+          if (mIdx2 >= 0 && mIdx2 < 12) monthlyData[mIdx2].expenses += amount;
         }
 
         if (isDateInTimeframe(eDate, timeframe, todayStr)) {
@@ -933,7 +932,7 @@ function getProfitLossData(timeframe, monthFilter, yearFilter) {
 
 function getDashboardStatsData(timeframe) {
   timeframe = timeframe || 'today';
-  return getCachedData('dash_stats_v5_' + timeframe, function() {
+  return getCachedData('dash_stats_v6_' + timeframe, function() {
     var ordSheet = getOrCreateSheet('orders');
     var custSheet = getOrCreateSheet('customers');
     var totalCustomers = Math.max(0, custSheet.getLastRow() - 1);
@@ -1004,7 +1003,7 @@ function getDashboardStatsData(timeframe) {
         { key: 'w3', label: 'Mgg 3', orders: 0, rev: 0 },
         { key: 'w4', label: 'Mgg 4', orders: 0, rev: 0 }
       ];
-    } else if (timeframe === 'year') {
+    } else { // 'year' or 'all'
       for (var m = 0; m < 12; m++) {
         var mKey = currYear + '-' + (m < 9 ? '0' + (m + 1) : (m + 1));
         chartBuckets.push({ key: mKey, label: monthNames[m], orders: 0, rev: 0 });
@@ -1027,16 +1026,15 @@ function getDashboardStatsData(timeframe) {
       var row = data[i];
       var tDate = row[tIdx];
       if (tDate instanceof Date) tDate = tDate.toISOString().slice(0, 10);
-      else tDate = (tDate || '').toString();
+      else tDate = (tDate || '').toString().slice(0, 10);
 
       var status = (row[sIdx] || '').toString();
       var total = parseFloat(row[totIdx]) || 0;
       var berat = parseFloat(row[bIdx]) || 0;
 
       var needsObj = (recentOrders.length < 5) || (activeProgress.length < 4 && status !== 'Diambil');
-      var obj = null;
-      if (needsObj || (timeframe === 'today' && tDate === today)) {
-        obj = {};
+      if (needsObj) {
+        var obj = {};
         for (var j = 0; j < headers.length; j++) {
           var val = row[j];
           if (val instanceof Date) val = val.toISOString().slice(0, 10);
@@ -1076,25 +1074,25 @@ function getDashboardStatsData(timeframe) {
         totalBeratPeriod += berat;
 
         if (timeframe === 'today') {
-          var createdAt = obj ? (obj['created_at'] || '').toString() : (row[cIdx] || '').toString();
+          var createdAt = row[cIdx] ? row[cIdx].toString() : '';
           var hr = 8;
           if (createdAt && createdAt.indexOf('T') !== -1) {
             hr = parseInt(createdAt.split('T')[1].split(':')[0], 10) || 8;
           } else {
             hr = 8 + (i % 7) * 2;
           }
-          var bIdx = 0;
-          if (hr < 9) bIdx = 0;
-          else if (hr < 11) bIdx = 1;
-          else if (hr < 13) bIdx = 2;
-          else if (hr < 15) bIdx = 3;
-          else if (hr < 17) bIdx = 4;
-          else if (hr < 19) bIdx = 5;
-          else bIdx = 6;
+          var bucketIdx = 0;
+          if (hr < 9) bucketIdx = 0;
+          else if (hr < 11) bucketIdx = 1;
+          else if (hr < 13) bucketIdx = 2;
+          else if (hr < 15) bucketIdx = 3;
+          else if (hr < 17) bucketIdx = 4;
+          else if (hr < 19) bucketIdx = 5;
+          else bucketIdx = 6;
 
-          if (chartBuckets[bIdx]) {
-            chartBuckets[bIdx].orders++;
-            chartBuckets[bIdx].rev += total;
+          if (chartBuckets[bucketIdx]) {
+            chartBuckets[bucketIdx].orders++;
+            chartBuckets[bucketIdx].rev += total;
           }
         } else if (timeframe === 'week') {
           for (var b = 0; b < chartBuckets.length; b++) {
@@ -1106,14 +1104,16 @@ function getDashboardStatsData(timeframe) {
         } else if (timeframe === 'month') {
           var dayNum = parseInt(tDate.slice(8, 10), 10) || 1;
           var wIdx = Math.min(3, Math.floor((dayNum - 1) / 7));
-          chartBuckets[wIdx].orders++;
-          chartBuckets[wIdx].rev += total;
-        } else {
+          if (chartBuckets[wIdx]) {
+            chartBuckets[wIdx].orders++;
+            chartBuckets[wIdx].rev += total;
+          }
+        } else { // 'year' or 'all'
           var mStr = tDate.slice(0, 7);
-          for (var b = 0; b < chartBuckets.length; b++) {
-            if (chartBuckets[b].key === mStr) {
-              chartBuckets[b].orders++;
-              chartBuckets[b].rev += total;
+          for (var b2 = 0; b2 < chartBuckets.length; b2++) {
+            if (chartBuckets[b2].key === mStr) {
+              chartBuckets[b2].orders++;
+              chartBuckets[b2].rev += total;
             }
           }
         }
@@ -1131,18 +1131,16 @@ function getDashboardStatsData(timeframe) {
     if (expSheet.getLastRow() > 1) {
       trackSheetsApiCall();
       var expHeaders = expSheet.getRange(1, 1, 1, expSheet.getLastColumn()).getValues()[0];
+      var expDateIdx = expHeaders.indexOf('tanggal');
+      var expJumlahIdx = expHeaders.indexOf('jumlah');
       trackSheetsApiCall();
       var expData = expSheet.getRange(2, 1, expSheet.getLastRow() - 1, expHeaders.length).getValues();
       for (var e = 0; e < expData.length; e++) {
         var er = expData[e];
-        var eo = {};
-        for (var ek = 0; ek < expHeaders.length; ek++) {
-          var ev = er[ek];
-          if (ev instanceof Date) ev = ev.toISOString().slice(0, 10);
-          eo[expHeaders[ek]] = ev;
-        }
-        var eDate = (eo['tanggal'] || '').toString();
-        var amount = parseFloat(eo['jumlah']) || 0;
+        var eDate = er[expDateIdx];
+        if (eDate instanceof Date) eDate = eDate.toISOString().slice(0, 10);
+        else eDate = (eDate || '').toString().slice(0, 10);
+        var amount = parseFloat(er[expJumlahIdx]) || 0;
 
         if (isDateInTimeframe(eDate, timeframe, today)) {
           pengeluaranPeriod += amount;

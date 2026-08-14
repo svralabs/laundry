@@ -141,13 +141,35 @@ export interface DashboardBatchData {
   statusSummary: StatusSummaryData;
 }
 
+// SWR In-Memory Caches for Instant UI transitions
+const dashboardBatchCache = new Map<string, { data: DashboardBatchData; ts: number }>();
+const profitLossCache = new Map<string, { data: any; ts: number }>();
+
 export async function loadDashboardBatch(timeframe?: TimeframeFilter) {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   const tf = timeframe || get(timeframeFilter) || 'today';
-  isLoading.set(true);
+
+  // SWR: If cached, instantly update the UI (0ms delay)
+  const cached = dashboardBatchCache.get(tf);
+  const now = Date.now();
+  if (cached) {
+    if (cached.data.stats) dashboardStats.set(cached.data.stats);
+    if (Array.isArray(cached.data.recentOrders)) orders.set(cached.data.recentOrders);
+    if (cached.data.statusSummary) statusSummary.set(cached.data.statusSummary);
+    isLoading.set(false);
+
+    // If cache is fresh (<15s), no need to refetch
+    if (now - cached.ts < 15000) return;
+  } else {
+    // Only show skeleton on first cold load
+    isLoading.set(true);
+  }
+
+  const signal = getAbortSignal('dashboardBatch');
   try {
-    const res = await fetchFromGAS<DashboardBatchData>(PUBLIC_GAS_URL, 'getDashboardBatch', { timeframe: tf });
+    const res = await fetchFromGAS<DashboardBatchData>(PUBLIC_GAS_URL, 'getDashboardBatch', { timeframe: tf }, signal);
     if (res.success && res.data) {
+      dashboardBatchCache.set(tf, { data: res.data, ts: Date.now() });
       if (res.data.stats) {
         dashboardStats.set(res.data.stats);
       }
@@ -158,8 +180,10 @@ export async function loadDashboardBatch(timeframe?: TimeframeFilter) {
         statusSummary.set(res.data.statusSummary);
       }
     }
-  } catch (e) {
-    console.error('[GAS API] Failed to load dashboard batch:', e);
+  } catch (e: any) {
+    if (e?.name !== 'AbortError') {
+      console.error('[GAS API] Failed to load dashboard batch:', e);
+    }
   } finally {
     isLoading.set(false);
   }
@@ -221,6 +245,8 @@ export function clearClientBuffers() {
   ordersBuffer = null;
   customersBuffer = null;
   expensesBuffer = null;
+  dashboardBatchCache.clear();
+  profitLossCache.clear();
 }
 
 export async function loadCustomers(page = 1, pageSize = 10, q = '', sortKey?: string, sortDir?: string) {
@@ -556,16 +582,33 @@ export async function loadProfitLoss(timeframe?: TimeframeFilter, monthFilter = 
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
   let tf = timeframe || get(timeframeFilter) || 'month';
   if (tf === 'all') tf = 'year';
-  isLoading.set(true);
+
+  const cacheKey = `${tf}_${monthFilter}_${yearFilter}`;
+  const cached = profitLossCache.get(cacheKey);
+  const now = Date.now();
+  if (cached) {
+    profitLoss.set(cached.data);
+    isLoading.set(false);
+    if (now - cached.ts < 15000) return;
+  } else {
+    isLoading.set(true);
+  }
+
+  const signal = getAbortSignal('profitLoss');
   try {
-    const res = await fetchFromGAS<any>(PUBLIC_GAS_URL, 'getProfitLoss', { timeframe: tf, monthFilter, yearFilter });
+    const res = await fetchFromGAS<any>(PUBLIC_GAS_URL, 'getProfitLoss', { timeframe: tf, monthFilter, yearFilter }, signal);
     if (res && res.success && res.data) {
+      profitLossCache.set(cacheKey, { data: res.data, ts: Date.now() });
       profitLoss.set(res.data);
     } else if (res && (res as any).totalRevenue !== undefined) {
-      profitLoss.set(res as any as ProfitLossSummary);
+      const data = res as any as ProfitLossSummary;
+      profitLossCache.set(cacheKey, { data, ts: Date.now() });
+      profitLoss.set(data);
     }
-  } catch (e) {
-    console.error('[GAS API] Failed to load profit loss:', e);
+  } catch (e: any) {
+    if (e?.name !== 'AbortError') {
+      console.error('[GAS API] Failed to load profit loss:', e);
+    }
   } finally {
     isLoading.set(false);
   }
@@ -574,7 +617,6 @@ export async function loadProfitLoss(timeframe?: TimeframeFilter, monthFilter = 
 // Initial Load Handler
 export async function loadDataFromGAS() {
   if (typeof window === 'undefined' || !PUBLIC_GAS_URL) return;
-  isLoading.set(true);
   try {
     const [srvRes, setRes] = await Promise.allSettled([
       fetchFromGAS<Service[]>(PUBLIC_GAS_URL, 'getServices'),
@@ -597,8 +639,6 @@ export async function loadDataFromGAS() {
     loadStatusSummary();
   } catch (err: any) {
     console.error('[GAS API] Error loading initial settings:', err);
-  } finally {
-    isLoading.set(false);
   }
 }
 
