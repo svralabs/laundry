@@ -440,7 +440,17 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
                        (!yearFilter || yearFilter === 'Semua') &&
                        (timeframe === 'today' || timeframe === 'week');
 
-  var maxScan = isDefaultQuery ? Math.min(1000, lastRow - 1) : (lastRow - 1);
+  var maxScan = 5000;
+  if (isDefaultQuery) {
+    maxScan = 1000;
+  } else if (q && q.toString().trim().length > 0) {
+    maxScan = 15000;
+  } else if (timeframe === 'month' || timeframe === 'year' || timeframe === 'all') {
+    maxScan = 10000;
+  } else {
+    maxScan = 5000;
+  }
+  maxScan = Math.min(maxScan, lastRow - 1);
   var startRow = lastRow - maxScan + 1;
 
   var numCols = HEADERS_MAP['orders'].length;
@@ -489,6 +499,9 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
   var totalPages = Math.ceil(total / pageSize) || 1;
   var startIdx = (page - 1) * pageSize;
   var rows = filtered.slice(startIdx, startIdx + pageSize);
+
+  var from = total === 0 ? 0 : startIdx + 1;
+  var to = Math.min(startIdx + pageSize, total);
 
   var nextCursor = (rows.length > 0 && startIdx + pageSize < total) ? rows[rows.length - 1].id : null;
   var prevCursor = (rows.length > 0 && startIdx > 0) ? rows[0].id : null;
@@ -770,6 +783,9 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
   var totalPages = Math.ceil(total / pageSize) || 1;
   var startIdx = (page - 1) * pageSize;
   var rows = filtered.slice(startIdx, startIdx + pageSize);
+
+  var from = total === 0 ? 0 : startIdx + 1;
+  var to = Math.min(startIdx + pageSize, total);
 
   var nextCursor = (rows.length > 0 && startIdx + pageSize < total) ? rows[rows.length - 1].id : null;
   var prevCursor = (rows.length > 0 && startIdx > 0) ? rows[0].id : null;
