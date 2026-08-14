@@ -89,6 +89,49 @@ function handleApiAction(action, payload) {
     var yearFilter  = (payload && payload.yearFilter)  ? payload.yearFilter  : undefined;
     return { success: true, data: getProfitLossData(timeframe, monthFilter, yearFilter) };
   }
+  if (action === 'getPartitioningDryRun') {
+    var ordSheet = getOrCreateSheet('orders');
+    var expSheet = getOrCreateSheet('expenses');
+    var lastOrdRow = ordSheet.getLastRow();
+    var lastExpRow = expSheet.getLastRow();
+    
+    var ordersByYear = {};
+    var expensesByYear = {};
+    
+    if (lastOrdRow > 1) {
+      var ordDates = ordSheet.getRange(2, 3, lastOrdRow - 1, 1).getValues();
+      for (var i = 0; i < ordDates.length; i++) {
+        var d = ordDates[i][0];
+        var y = 'Unknown';
+        if (d instanceof Date) y = d.getFullYear().toString();
+        else if (d) y = d.toString().slice(0, 4);
+        ordersByYear[y] = (ordersByYear[y] || 0) + 1;
+      }
+    }
+    
+    if (lastExpRow > 1) {
+      var expDates = expSheet.getRange(2, 2, lastExpRow - 1, 1).getValues();
+      for (var j = 0; j < expDates.length; j++) {
+        var ed = expDates[j][0];
+        var ey = 'Unknown';
+        if (ed instanceof Date) ey = ed.getFullYear().toString();
+        else if (ed) ey = ed.toString().slice(0, 4);
+        expensesByYear[ey] = (expensesByYear[ey] || 0) + 1;
+      }
+    }
+    
+    return {
+      success: true,
+      data: {
+        totalOrders: Math.max(0, lastOrdRow - 1),
+        totalExpenses: Math.max(0, lastExpRow - 1),
+        ordersByYear: ordersByYear,
+        expensesByYear: expensesByYear,
+        recommendedPartitions: Object.keys(ordersByYear).map(function(yr) { return 'orders_' + yr; }),
+        summary: 'Simulasi partisi siap.'
+      }
+    };
+  }
   if (action === 'seedDummyData') {
     return { success: true, message: seedDummyData() };
   }
@@ -447,8 +490,8 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
   var startIdx = (page - 1) * pageSize;
   var rows = filtered.slice(startIdx, startIdx + pageSize);
 
-  var from = total === 0 ? 0 : startIdx + 1;
-  var to = Math.min(startIdx + pageSize, total);
+  var nextCursor = (rows.length > 0 && startIdx + pageSize < total) ? rows[rows.length - 1].id : null;
+  var prevCursor = (rows.length > 0 && startIdx > 0) ? rows[0].id : null;
 
   var result = {
     success: true,
@@ -459,7 +502,9 @@ function getPagedOrders(page, pageSize, q, statusFilter, yearFilter, timeframe, 
       pageSize: pageSize,
       totalPages: totalPages,
       from: from,
-      to: to
+      to: to,
+      nextCursor: nextCursor,
+      prevCursor: prevCursor
     }
   };
 
@@ -543,6 +588,9 @@ function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
   var from = total === 0 ? 0 : startIdx + 1;
   var to = Math.min(startIdx + pageSize, total);
 
+  var nextCursor = (rows.length > 0 && startIdx + pageSize < total) ? rows[rows.length - 1].id : null;
+  var prevCursor = (rows.length > 0 && startIdx > 0) ? rows[0].id : null;
+
   var result = {
     success: true,
     data: rows,
@@ -552,7 +600,9 @@ function getPagedCustomers(page, pageSize, q, sortKey, sortDir) {
       pageSize: pageSize,
       totalPages: totalPages,
       from: from,
-      to: to
+      to: to,
+      nextCursor: nextCursor,
+      prevCursor: prevCursor
     }
   };
 
@@ -721,8 +771,8 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
   var startIdx = (page - 1) * pageSize;
   var rows = filtered.slice(startIdx, startIdx + pageSize);
 
-  var from = total === 0 ? 0 : startIdx + 1;
-  var to = Math.min(startIdx + pageSize, total);
+  var nextCursor = (rows.length > 0 && startIdx + pageSize < total) ? rows[rows.length - 1].id : null;
+  var prevCursor = (rows.length > 0 && startIdx > 0) ? rows[0].id : null;
 
   var result = {
     success: true,
@@ -733,7 +783,9 @@ function getPagedExpenses(page, pageSize, categoryFilter, yearFilter, q, timefra
       pageSize: pageSize,
       totalPages: totalPages,
       from: from,
-      to: to
+      to: to,
+      nextCursor: nextCursor,
+      prevCursor: prevCursor
     },
     summary: {
       totalExpenses: totalExpenseFiltered,
@@ -1212,15 +1264,90 @@ function getSheetData(sheetName) {
 }
 
 // ─────────────────────────────────────────────
-// P1-C: LOCKSERVICE WRAPPERS
+// P1-C: LOCKSERVICE & INDEX WRAPPERS
 // ─────────────────────────────────────────────
 
 /**
- * P1-C + P1-B: appendSheetRow dengan LockService.
- * sheet.appendRow() dipanggil 1 kali saja (sudah atomic untuk satu baris).
+ * STEP 2: MANUAL INDEX MAP (ID → Row Number)
+ * O(1) Cache-backed in-memory row index resolver with fallback to TextFinder.
+ */
+function getIdRowIndexMap(sheetName) {
+  var cache = CacheService.getScriptCache();
+  var cached = cache.get('id_row_map_' + sheetName);
+  if (cached) {
+    try {
+      return JSON.parse(cached);
+    } catch(e) {}
+  }
+
+  var sheet = getOrCreateSheet(sheetName);
+  var lastRow = sheet.getLastRow();
+  var map = {};
+  if (lastRow > 1) {
+    trackSheetsApiCall();
+    var idValues = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < idValues.length; i++) {
+      var idVal = idValues[i][0];
+      if (idVal !== '' && idVal !== null && idVal !== undefined) {
+        map[idVal.toString()] = i + 2;
+      }
+    }
+    safeCachePut('id_row_map_' + sheetName, JSON.stringify(map), 1800);
+  }
+  return map;
+}
+
+function invalidateIdIndexMap(sheetName) {
+  try {
+    CacheService.getScriptCache().remove('id_row_map_' + sheetName);
+  } catch(e) {}
+}
+
+/**
+ * Fast Row Index Finder: Cek Index Map O(1) dulu → Fallback TextFinder C++ Native.
+ */
+function findRowIndexById(sheet, id, sheetName) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1 || !id) return -1;
+
+  var idStr = id.toString();
+
+  if (sheetName) {
+    try {
+      var map = getIdRowIndexMap(sheetName);
+      if (map && map[idStr]) {
+        var candidateRow = parseInt(map[idStr], 10);
+        if (candidateRow >= 2 && candidateRow <= lastRow) {
+          var cellVal = sheet.getRange(candidateRow, 1).getValue();
+          if (cellVal && cellVal.toString() === idStr) {
+            return candidateRow;
+          }
+        }
+      }
+    } catch(e) {}
+  }
+
+  trackSheetsApiCall();
+  var idColRange = sheet.getRange(2, 1, lastRow - 1, 1);
+  var finder = idColRange.createTextFinder(idStr).matchEntireCell(true);
+  var match = finder.findNext();
+  var foundRow = match ? match.getRow() : -1;
+
+  if (foundRow !== -1 && sheetName) {
+    try {
+      var mapObj = getIdRowIndexMap(sheetName);
+      mapObj[idStr] = foundRow;
+      safeCachePut('id_row_map_' + sheetName, JSON.stringify(mapObj), 1800);
+    } catch(e) {}
+  }
+
+  return foundRow;
+}
+
+/**
+ * appendSheetRow dengan LockService + Index Map Auto-registration.
  */
 function appendSheetRow(sheetName, item) {
-  // Pengecekan kapasitas mentok
   var capacity = calculateCapacity();
   if (capacity.percentage >= 99.5) {
     throw new Error('CAPACITY_FULL: Kapasitas penyimpanan database penuh.');
@@ -1235,36 +1362,29 @@ function appendSheetRow(sheetName, item) {
     var row     = headers.map(function(h) { return item[h] !== undefined ? item[h] : ''; });
     trackSheetsApiCall();
     sheet.appendRow(row);
+
+    var newRowIdx = sheet.getLastRow();
+    if (item && item.id) {
+      try {
+        var map = getIdRowIndexMap(sheetName);
+        map[item.id.toString()] = newRowIdx;
+        safeCachePut('id_row_map_' + sheetName, JSON.stringify(map), 1800);
+      } catch(e) {}
+    }
   } finally {
     lock.releaseLock();
   }
 }
 
 /**
- * STEP 5: Fast Row Index Finder pakai TextFinder (C++ Native di Sheets Engine).
- * Menggantikan full sheet.getDataRange().getValues() saat mencari ID di baris write operation.
- */
-function findRowIndexById(sheet, id) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return -1;
-
-  trackSheetsApiCall();
-  var idColRange = sheet.getRange(2, 1, lastRow - 1, 1);
-  var finder = idColRange.createTextFinder(id.toString()).matchEntireCell(true);
-  var match = finder.findNext();
-  return match ? match.getRow() : -1;
-}
-
-/**
- * P1-A + P1-C + STEP 5: updateSheetRow — TextFinder + batch write (1 setValues) + LockService.
- * Menggunakan TextFinder C++ native di kolom A untuk mencari ID secara instant.
+ * updateSheetRow dengan O(1) Index Lookup + batch write (1 setValues) + LockService.
  */
 function updateSheetRow(sheetName, id, updateObj) {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
     var sheet = getOrCreateSheet(sheetName);
-    var targetRowIndex = findRowIndexById(sheet, id);
+    var targetRowIndex = findRowIndexById(sheet, id, sheetName);
     if (targetRowIndex === -1) return;
 
     var numCols = HEADERS_MAP[sheetName] ? HEADERS_MAP[sheetName].length : sheet.getLastColumn();
@@ -1287,18 +1407,19 @@ function updateSheetRow(sheetName, id, updateObj) {
 }
 
 /**
- * P1-C + STEP 5: deleteSheetRow dengan TextFinder + LockService.
+ * deleteSheetRow dengan LockService + Index Invalidation.
  */
 function deleteSheetRow(sheetName, id) {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(10000);
     var sheet = getOrCreateSheet(sheetName);
-    var targetRowIndex = findRowIndexById(sheet, id);
+    var targetRowIndex = findRowIndexById(sheet, id, sheetName);
     if (targetRowIndex === -1) return;
 
     trackSheetsApiCall();
     sheet.deleteRow(targetRowIndex);
+    invalidateIdIndexMap(sheetName);
   } finally {
     lock.releaseLock();
   }
